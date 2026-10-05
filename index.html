@@ -52,12 +52,23 @@
 
   <footer id="operator-bar">
     <p id="stock-warning" class="warn-text" hidden></p>
+    <p id="sync-status" hidden></p>
     <p>
       <span id="backup-status"></span>
       <button id="backup-btn" type="button">Set up auto-backup</button>
       <button id="export-btn" type="button">Export CSV</button>
     </p>
   </footer>
+
+  <!-- PIN prompt shown before the admin panel -->
+  <div id="pin-overlay" class="admin-overlay" hidden>
+    <form id="pin-form" class="pin-box" autocomplete="off">
+      <h2>Admin PIN</h2>
+      <p><input id="pin-input" type="password" inputmode="numeric" autocomplete="off" maxlength="20" aria-label="Admin PIN"></p>
+      <p id="pin-msg" role="alert"></p>
+      <p><button type="submit">Unlock</button> <button type="button" id="pin-cancel">Cancel</button></p>
+    </form>
+  </div>
 
   <!-- Hidden admin panel: Ctrl+Shift+A (or add #admin to the address). Content is built by ui.js. -->
   <div id="admin" class="admin-overlay" hidden>
@@ -88,6 +99,11 @@
       <section id="admin-sim">
         <h3>Simulation</h3>
         <div id="admin-sim-body"></div>
+      </section>
+
+      <section id="admin-sync">
+        <h3>Google Sheets sync</h3>
+        <div id="admin-sync-body"></div>
       </section>
 
       <section id="admin-backup">

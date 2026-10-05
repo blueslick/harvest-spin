@@ -30,6 +30,17 @@
   let backupDirty = false;
   let backupText = "";
 
+  // Google Sheets sync. URL + secret are kept in the browser only (never in git, never in backups).
+  const SYNC_KEY = "harvestSpin.sync.v1";
+  const sync = { url: "", token: "", lastTs: null };   // lastTs = timestamp of the last spin the sheet has
+  let syncBusy = false;
+  let syncText = "";
+  let syncEls = null;
+
+  // admin PIN
+  let pinFails = 0;
+  let pinLockedUntil = 0;
+
   const $ = (id) => document.getElementById(id);
   const settings = () => E.resolveSettings(CONFIG, state.overrides);
   const emojiOf = (id) => (CONFIG.symbols.find((s) => s.id === id) || {}).emoji || "?";
@@ -180,6 +191,156 @@
   }
 
   // =======================================================================
+  // GOOGLE SHEETS SYNC
+  // =======================================================================
+  function loadSync() {
+    try {
+      const r = JSON.parse(localStorage.getItem(SYNC_KEY));
+      if (r && typeof r === "object") { sync.url = String(r.url || ""); sync.token = String(r.token || ""); sync.lastTs = r.lastTs || null; }
+    } catch (e) { /* no saved sync settings */ }
+  }
+
+  function saveSync() {
+    try { localStorage.setItem(SYNC_KEY, JSON.stringify(sync)); } catch (e) { /* ignore */ }
+  }
+
+  /** Spins the sheet doesn't have yet: everything after the last one we sent (all of them if that one isn't in the log). */
+  function syncPending() {
+    const i = sync.lastTs ? state.log.findIndex((e) => e.timestamp === sync.lastTs) : -1;
+    return state.log.slice(i + 1);
+  }
+
+  function renderSyncStatus() {
+    const el = $("sync-status");
+    el.hidden = !sync.url;
+    el.textContent = syncText;
+    if (syncEls) syncEls.status.textContent = syncText || (sync.url ? "" : "Not set up.");
+  }
+
+  /**
+   * POST to the Apps Script web app. First try a normal request so we can read the answer ("confirmed").
+   * If the browser won't let us read it, send it once more as an opaque request ("sent", unconfirmed).
+   * Network failures throw, so the caller keeps the spins queued.
+   */
+  async function postToSheet(payload) {
+    const body = JSON.stringify(payload);
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), 15000);
+    try {
+      try {
+        const res = await fetch(sync.url, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body, signal: ctl.signal });
+        const data = await res.json();
+        return data && data.ok ? { ok: true, confirmed: true, data } : { ok: false, error: (data && data.error) || "unknown error" };
+      } catch (e) {
+        if (ctl.signal.aborted) throw e;
+        await fetch(sync.url, { method: "POST", mode: "no-cors", headers: { "Content-Type": "text/plain;charset=utf-8" }, body, signal: ctl.signal });
+        return { ok: true, confirmed: false };
+      }
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  /** Send whatever the sheet is missing. Safe to call any time; the sheet ignores duplicates. */
+  async function syncNow(all) {
+    if (!sync.url || syncBusy) return;
+    const pending = all ? state.log.slice() : syncPending();
+    if (!pending.length) { syncText = "Sheet: up to date (" + state.log.length + " spins)"; renderSyncStatus(); return; }
+    syncBusy = true;
+    let again = false;
+    try {
+      const r = await postToSheet({ token: sync.token, header: E.LOG_COLUMNS, rows: pending.map(E.logRow) });
+      if (r.ok) {
+        sync.lastTs = pending[pending.length - 1].timestamp;
+        saveSync();
+        syncText = r.confirmed ? "Sheet: " + state.log.length + " spins saved \u2714" : "Sheet: sent (can't confirm \u2014 check the sheet)";
+        again = syncPending().length > 0;   // spins made while we were sending
+      } else {
+        syncText = "\u26A0\uFE0F Sheet rejected the data: " + r.error;
+      }
+    } catch (e) {
+      syncText = "\u26A0\uFE0F Sheet offline \u2014 " + pending.length + " spin(s) waiting; will retry";
+    }
+    syncBusy = false;
+    renderSyncStatus();
+    if (again) syncNow();
+  }
+
+  async function syncTest() {
+    if (!sync.url) { syncEls.status.textContent = "Enter the web app URL first."; return; }
+    syncEls.status.textContent = "Testing...";
+    try {
+      const r = await postToSheet({ token: sync.token, test: true });
+      syncEls.status.textContent = !r.ok ? "\u26A0\uFE0F Rejected: " + r.error
+        : r.confirmed ? "\u2714 Connected. A row was added to the 'Connection test' tab."
+        : "Request sent, but this browser can't read the answer. Check that a row appeared in the 'Connection test' tab.";
+    } catch (e) {
+      syncEls.status.textContent = "\u26A0\uFE0F Couldn't reach it (offline, or the URL is wrong).";
+    }
+  }
+
+  function buildSync() {
+    const url = h("input", { type: "text", placeholder: "https://script.google.com/macros/s/.../exec", size: "60", autocomplete: "off" });
+    const token = h("input", { type: "password", placeholder: "same secret as in the script", autocomplete: "off" });
+    const status = h("p", { role: "status" });
+    url.value = sync.url;
+    token.value = sync.token;
+    const save = h("button", { type: "button" }, "Save");
+    save.addEventListener("click", () => {
+      sync.url = url.value.trim();
+      sync.token = token.value;
+      sync.lastTs = null;            // new destination: send everything again
+      saveSync();
+      syncText = "";
+      renderSyncStatus();
+      status.textContent = sync.url ? "Saved. Sending all spins so far..." : "Sync turned off.";
+      syncNow(true);
+    });
+    syncEls = { status };
+    $("admin-sync-body").replaceChildren(
+      h("p", {}, "Every spin is copied to your Google Sheet. If the internet drops, spins queue up and are sent when it's back."),
+      h("p", {}, h("label", {}, "Web app URL: ", url)),
+      h("p", {}, h("label", {}, "Secret token: ", token)),
+      h("p", {}, save, " ", h("button", { type: "button", onclick: syncTest }, "Send test row"), " ",
+        h("button", { type: "button", onclick: () => { syncText = ""; syncNow(true); status.textContent = "Re-sending everything (the sheet skips spins it already has)..."; } }, "Resend all spins")),
+      status,
+      h("p", { class: "admin-note" }, "The URL and token are saved in this browser only. They are not part of the game data, backups or the repository."));
+    renderSyncStatus();
+  }
+
+  // =======================================================================
+  // ADMIN PIN
+  // =======================================================================
+  function requestAdmin() {
+    if (!configOk || isAdminOpen()) return;
+    if (!CONFIG.adminPin) { openAdmin(); return; }
+    $("pin-overlay").hidden = false;
+    $("pin-input").value = "";
+    $("pin-msg").textContent = "";
+    $("pin-input").focus();
+  }
+
+  function closePin() {
+    $("pin-overlay").hidden = true;
+  }
+
+  function onPinSubmit(ev) {
+    ev.preventDefault();
+    const wait = Math.ceil((pinLockedUntil - Date.now()) / 1000);
+    if (wait > 0) { $("pin-msg").textContent = "Too many wrong tries. Wait " + wait + "s."; return; }
+    if (E.pinOk(CONFIG, $("pin-input").value)) {
+      pinFails = 0;
+      closePin();
+      openAdmin();
+      return;
+    }
+    pinFails += 1;
+    $("pin-input").value = "";
+    if (pinFails >= 5) { pinFails = 0; pinLockedUntil = Date.now() + 30000; $("pin-msg").textContent = "Too many wrong tries. Locked for 30s."; }
+    else $("pin-msg").textContent = "Wrong PIN.";
+  }
+
+  // =======================================================================
   // MAIN SCREEN
   // =======================================================================
   function grandRuleText(s) {
@@ -303,6 +464,7 @@
     const result = E.resolveSpin(state, CONFIG, Math.random);
     E.commitSpin(state, result);
     saveState();
+    syncNow();
     renderMain();
 
     animateReels(result.symbols, () => {
@@ -426,6 +588,7 @@
     buildSettings();
     buildBudget();
     buildSim();
+    buildSync();
     buildBackup();
     buildDanger();
   }
@@ -680,24 +843,36 @@
     $("new-player-btn").addEventListener("click", onNewPlayer);
     $("export-btn").addEventListener("click", exportCsv);
     $("backup-btn").addEventListener("click", chooseBackupFile);
+    $("pin-form").addEventListener("submit", onPinSubmit);
+    $("pin-cancel").addEventListener("click", closePin);
+    $("pin-overlay").addEventListener("mousedown", (e) => { if (e.target === $("pin-overlay")) closePin(); });
+
+    loadSync();
+    renderSyncStatus();
+    window.addEventListener("online", () => syncNow());
+    setInterval(() => { if (sync.url && !syncBusy && syncPending().length) syncNow(); }, 30000);
+    if (sync.url) syncNow();
     $("admin-close").addEventListener("click", closeAdmin);
     $("admin").addEventListener("mousedown", (e) => { if (e.target === $("admin")) closeAdmin(); });
 
     document.addEventListener("keydown", (e) => {
       if (e.ctrlKey && e.shiftKey && (e.code === "KeyA" || (e.key || "").toLowerCase() === "a")) {
         e.preventDefault();
-        isAdminOpen() ? closeAdmin() : openAdmin();
-      } else if (e.key === "Escape" && isAdminOpen()) {
-        closeAdmin();
+        if (isAdminOpen()) closeAdmin();
+        else if (!$("pin-overlay").hidden) closePin();
+        else requestAdmin();
+      } else if (e.key === "Escape") {
+        if (isAdminOpen()) closeAdmin();
+        else if (!$("pin-overlay").hidden) closePin();
       }
     });
     // Fallback if the browser keeps Ctrl+Shift+A for itself: add #admin to the address.
-    window.addEventListener("hashchange", () => { if (location.hash === "#admin") openAdmin(); });
+    window.addEventListener("hashchange", () => { if (location.hash === "#admin") requestAdmin(); });
 
     showLastResult();
     renderBackupStatus();
     renderMain();
-    if (location.hash === "#admin") openAdmin();
+    if (location.hash === "#admin") requestAdmin();
   }
 
   init();

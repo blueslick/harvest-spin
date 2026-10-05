@@ -109,3 +109,9 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 @media (prefers-reduced-motion: reduce) {
   #meter.is-ramping, .reel.is-stopped { animation: none; }
 }
+
+/* --- admin PIN prompt --- */
+.pin-box { background: #fff; max-width: 20rem; margin: 20vh auto 0; padding: 1rem 1.5rem; border-radius: 6px; text-align: center; }
+.pin-box input { font-size: 1.5rem; width: 10rem; text-align: center; letter-spacing: .3em; }
+#pin-msg { min-height: 1.4em; color: #b00020; font-weight: bold; }
+#sync-status { margin: .25rem 0; }
