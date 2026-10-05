@@ -489,7 +489,8 @@ const HarvestEngine = (function () {
     const available = !!grandTier && stockOf(state, settings, grandTier.id) > 0;
     const nextSpin = state.totalSpins + 1;
     const active = available && nextSpin >= g.rampStartSpin;
-    const fill = g.rampStartSpin <= 1 ? 1 : Math.min(1, state.totalSpins / (g.rampStartSpin - 1));
+    // fills as spins approach rampStartSpin; full once the next spin is on the ramp
+    const fill = nextSpin >= g.rampStartSpin ? 1 : state.totalSpins / g.rampStartSpin;
     return { available, active, fill, nextSpin, rampStartSpin: g.rampStartSpin, guaranteedBySpin: g.guaranteedBySpin };
   }
 
