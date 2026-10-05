@@ -73,18 +73,21 @@ const HarvestEngine = (function () {
   }
 
   /**
-   * Which tier does this combo belong to? Returns a tier id, or "none".
+   * Which tier does this combo belong to? Returns a tier id, or "none"
+   * (only possible when the config has no thank-you/remainder tier).
    * Throws if the config is broken and the combo matches several tiers.
    */
   function classify(combo, config) {
     let found = null;
+    let remainder = null;
     for (const t of config.tiers) {
+      if (t.remainder) { remainder = t; continue; }   // the thank-you tier: takes every combo no other tier wants
       if (ruleMatches(combo, t.rule)) {
         if (found) throw new Error("Combo " + combo.join(",") + " matches both " + found + " and " + t.id);
         found = t.id;
       }
     }
-    return found || "none";
+    return found || (remainder ? remainder.id : "none");
   }
 
   // Pool of every combo for every outcome, built once per config object.
@@ -97,6 +100,9 @@ const HarvestEngine = (function () {
       for (const combo of enumerateCombos(config.symbols.map((s) => s.id))) {
         table[classify(combo, config)].push(combo);
       }
+      // "none" only happens if the thank-you tier is out of stock; show that tier's (non-winning) combos then.
+      const rem = config.tiers.find((t) => t.remainder);
+      if (rem && table.none.length === 0) table.none = table[rem.id].slice();
       tableCache.set(config, table);
     }
     return table;
@@ -104,10 +110,10 @@ const HarvestEngine = (function () {
 
   /**
    * OUTCOME-FIRST STEP 2: given the tier that was rolled, pick a combo
-   * uniformly at random from ALL valid combos for that tier. For "none" the
-   * pool is every combo that matches no tier at all (no near-miss logic).
+   * uniformly at random from ALL valid combos for that tier. The thank-you tier's
+   * pool is every combo that matches no winning tier (no near-miss logic).
    * A tier that is out of stock can never be rolled, and its combos are NOT
-   * in the "none" pool, so a winning-looking combo is never shown without a prize.
+   * in the thank-you pool, so a winning-looking combo is never shown without a prize.
    */
   function generateCombo(tierId, config, rng) {
     const pool = comboTable(config)[tierId];
@@ -134,7 +140,8 @@ const HarvestEngine = (function () {
         description: t.description,
         rule: t.rule,
         risingOdds: !!t.risingOdds,
-        chance: t.risingOdds ? null : t.chance,
+        remainder: !!t.remainder,
+        chance: t.risingOdds || t.remainder ? null : t.chance,
         prizeName: t.prizeName,
         prizeCostRM: t.prizeCostRM,
         startingStock: t.startingStock,
@@ -150,7 +157,7 @@ const HarvestEngine = (function () {
     else if (p.length === 2 && p[0] === "launchBonus" && BONUS_FIELDS.includes(p[1])) s.launchBonus[p[1]] = value;
     else if (p.length === 3 && p[0] === "tiers" && TIER_FIELDS.includes(p[2])) {
       const t = s.tiers.find((x) => x.id === p[1]);
-      if (t && !(t.risingOdds && p[2] === "chance")) t[p[2]] = value;
+      if (t && !((t.risingOdds || t.remainder) && p[2] === "chance")) t[p[2]] = value;
     }
   }
 
@@ -178,7 +185,7 @@ const HarvestEngine = (function () {
   function tryOverride(current, key, value, config) {
     const next = Object.assign({}, current);
     const def = readSetting(baseSettings(config), key);
-    if (def === undefined) return { ok: false, overrides: current, problems: ["Unknown setting: " + key] };
+    if (def === undefined || def === null) return { ok: false, overrides: current, problems: ["Not an editable setting: " + key] };
     if (value === def) delete next[key];
     else next[key] = value;
     const problems = validateSettings(resolveSettings(config, next));
@@ -208,7 +215,7 @@ const HarvestEngine = (function () {
 
     let sum = 0;
     s.tiers.forEach((t) => {
-      if (!t.risingOdds) {
+      if (!t.risingOdds && !t.remainder) {
         if (!(isNum(t.chance) && t.chance >= 0 && t.chance <= 1)) p.push(t.name + ": chance must be between 0% and 100%.");
         else sum += t.chance;
       }
@@ -231,9 +238,12 @@ const HarvestEngine = (function () {
     if (tiers.length < 1) p.push("config.tiers is empty.");
     if (new Set(tiers.map((t) => t.id)).size !== tiers.length) p.push("Two tiers share the same id.");
     if (tiers.filter((t) => t.risingOdds).length > 1) p.push("Only one tier can have risingOdds: true.");
+    if (tiers.filter((t) => t.remainder).length > 1) p.push("Only one tier can have remainder: true.");
+    if (tiers.some((t) => t.remainder && t.risingOdds)) p.push("A tier can't be both risingOdds and remainder.");
+    const fixedTiers = tiers.filter((t) => !t.remainder);
 
     let rulesUsable = true;
-    tiers.forEach((t) => {
+    fixedTiers.forEach((t) => {
       const r = t.rule;
       if (!r || !RULES[r.type]) { p.push(t.id + ': unknown rule type "' + (r && r.type) + '".'); rulesUsable = false; return; }
       const refs = [].concat(r.symbol || [], r.except || [], r.symbols || []);
@@ -247,8 +257,9 @@ const HarvestEngine = (function () {
       tiers.forEach((t) => (counts[t.id] = 0));
       const reported = new Set();
       for (const combo of enumerateCombos(symbolIds)) {
-        const hits = tiers.filter((t) => ruleMatches(combo, t.rule)).map((t) => t.id);
+        const hits = fixedTiers.filter((t) => ruleMatches(combo, t.rule)).map((t) => t.id);
         hits.forEach((id) => counts[id]++);
+        if (hits.length === 0) tiers.filter((t) => t.remainder).forEach((t) => counts[t.id]++);
         if (hits.length > 1) {
           const key = hits.join("+");
           if (!reported.has(key)) {
@@ -262,7 +273,6 @@ const HarvestEngine = (function () {
 
     p.push.apply(p, validateSettings(baseSettings(config)));
 
-    if (!Array.isArray(config.facts)) p.push("config.facts must be a list.");
     const stops = config.animation && config.animation.reelStopTimesMs;
     if (!(Array.isArray(stops) && stops.length === 3 && stops.every((x, i) => isNum(x) && x > 0 && (i === 0 || x > stops[i - 1])))) {
       p.push("animation.reelStopTimesMs must be 3 increasing numbers, e.g. [1300, 2000, 2700].");
@@ -289,9 +299,12 @@ const HarvestEngine = (function () {
     };
   }
 
-  /** Validates data loaded from storage. Returns a clean state, or null if it's unusable. */
-  function normalizeState(raw) {
+  /** Validates data loaded from storage (or, with strict=true, a backup file). Returns a clean state, or null if it's unusable. */
+  function normalizeState(raw, strict) {
     if (!raw || typeof raw !== "object") return null;
+    // strict (used when restoring a backup file): the file must really look like a saved game
+    if (strict && !(raw.version === 1 && isInt(raw.totalSpins) && isInt(raw.playerCount) && Array.isArray(raw.log) &&
+        raw.awarded && typeof raw.awarded === "object" && raw.overrides && typeof raw.overrides === "object")) return null;
     const s = Object.assign(createInitialState(), raw);
     if (!(isInt(s.totalSpins) && s.totalSpins >= 0)) return null;
     if (!(isInt(s.playerCount) && s.playerCount >= 0)) return null;
@@ -344,16 +357,19 @@ const HarvestEngine = (function () {
    *
    * Order of steps (see README, "How the odds work"):
    *   1. Grand chance from the schedule (0 if the grand is out of stock).
-   *   2. Sold-out tiers 2+ give their chance to "no prize" or the next tier down.
+   *   2. Sold-out tiers 2+ give their chance to the leftover or the next tier down.
    *   3. Launch bonus multiplies the remaining tiers 2+ (never the grand).
    *   4. Tiers 2+ are scaled down proportionally if they would exceed 100% minus the grand's share.
-   *   5. "No prize" gets whatever is left.
+   *   5. The thank-you tier gets whatever is left ("none" only if it has no stock).
    */
   function computeProbabilities(state, settings) {
     const spinNumber = state.totalSpins + 1;
     const bonus = launchBonusStatus(state, settings);
     const order = settings.tiers.map((t) => t.id);
     const probs = {};
+    const fixed = (t) => !t.risingOdds && !t.remainder;   // tiers with a chance set in config
+    const remainderTier = settings.tiers.find((t) => t.remainder);
+    settings.tiers.forEach((t) => (probs[t.id] = 0));
 
     // 1. grand
     let pGrand = 0;
@@ -369,7 +385,7 @@ const HarvestEngine = (function () {
     // 2. stock
     let carry = 0;
     settings.tiers.forEach((t) => {
-      if (t.risingOdds) return;
+      if (!fixed(t)) return;
       const p = t.chance + carry;
       carry = 0;
       if (stockOf(state, settings, t.id) > 0) {
@@ -382,21 +398,24 @@ const HarvestEngine = (function () {
 
     // 3. launch bonus
     if (bonus.active) {
-      settings.tiers.forEach((t) => { if (!t.risingOdds) probs[t.id] *= settings.launchBonus.multiplier; });
+      settings.tiers.forEach((t) => { if (fixed(t)) probs[t.id] *= settings.launchBonus.multiplier; });
     }
 
     // 4. cap
     let sum = 0;
-    settings.tiers.forEach((t) => { if (!t.risingOdds) sum += probs[t.id]; });
+    settings.tiers.forEach((t) => { if (fixed(t)) sum += probs[t.id]; });
     const room = Math.max(0, 1 - pGrand);
     if (sum > room) {
       const k = sum > 0 ? room / sum : 0;
-      settings.tiers.forEach((t) => { if (!t.risingOdds) probs[t.id] *= k; });
+      settings.tiers.forEach((t) => { if (fixed(t)) probs[t.id] *= k; });
       sum = room;
     }
 
-    // 5. remainder
-    probs.none = Math.max(0, 1 - pGrand - sum);
+    // 5. whatever is left goes to the thank-you tier (or to "none" if it's out of stock / not configured)
+    const leftover = Math.max(0, 1 - pGrand - sum);
+    const toThanks = remainderTier && stockOf(state, settings, remainderTier.id) > 0 ? leftover : 0;
+    if (remainderTier) probs[remainderTier.id] = toThanks;
+    probs.none = leftover - toThanks;
     return { spinNumber, bonusActive: bonus.active, grandChance: grandNow, probs, order };
   }
 
@@ -416,7 +435,7 @@ const HarvestEngine = (function () {
   // -----------------------------------------------------------------------
   /**
    * Decide the outcome of the next spin WITHOUT changing the state.
-   * Returns the tier, the 3 symbols to show, and a fact if there's no prize.
+   * Returns the tier, the 3 symbols to show, and the prize.
    */
   function resolveSpin(state, config, rng) {
     const settings = resolveSettings(config, state.overrides);
@@ -428,24 +447,18 @@ const HarvestEngine = (function () {
     const tier = settings.tiers.find((t) => t.id === tierId) || null;
     const symbols = generateCombo(tierId, config, rng);
 
-    let fact = null;
-    if (!tier && config.facts.length) {
-      const last = state.lastResult && state.lastResult.fact;
-      const choices = config.facts.length > 1 ? config.facts.filter((f) => f !== last) : config.facts;
-      fact = choices[Math.floor(rng() * choices.length)];
-    }
     return {
       spinNumber: info.spinNumber,
       tier: tierId,
-      tierName: tier ? tier.name : "No prize",
+      tierName: tier ? tier.name : "Out of gifts",
       isWin: !!tier,
       isGrand: !!(tier && tier.risingOdds),
+      isThankYou: !!(tier && tier.remainder),
       prizeName: tier ? tier.prizeName : null,
       costRM: tier ? tier.prizeCostRM : 0,
       symbols,
       emoji: symbols.map((id) => (config.symbols.find((s) => s.id === id) || {}).emoji).join(""),
       bonusActive: info.bonusActive,
-      fact,
     };
   }
 

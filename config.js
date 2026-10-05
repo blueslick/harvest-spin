@@ -66,7 +66,8 @@ const HARVEST_CONFIG = {
   // LAUNCH BONUS
   // For the first `spins` spins of the event, the odds of Tiers 2-5 are
   // multiplied by `multiplier`. It never affects the grand prize, and the
-  // total chance is capped at 100% (see README: "How the odds work").
+  // total chance is capped at 100% (see README: "How the odds work"). Because
+  // the Thank-You Gift takes what's left, a big multiplier just shrinks it.
   // Set enabled to false to turn it off.
   // ---------------------------------------------------------------------
   launchBonus: {
@@ -78,10 +79,10 @@ const HARVEST_CONFIG = {
   // ---------------------------------------------------------------------
   // WHEN A PRIZE RUNS OUT OF STOCK
   // A prize with 0 stock is never awarded. What happens to its chance?
-  //   "noPrize"       -> it becomes extra "no prize" chance  (default)
+  //   "noPrize"       -> it falls through to the Thank-You Gift (default)
   //   "nextLowerTier" -> it is added to the next tier down that still has
-  //                      stock (Tier 3 -> Tier 4 -> Tier 5 -> no prize)
-  // The grand prize always goes back to "no prize" when it is won.
+  //                      stock (Tier 3 -> Tier 4 -> Tier 5 -> Thank-You Gift)
+  // The grand prize always falls through to the Thank-You Gift when it is won.
   // ---------------------------------------------------------------------
   outOfStock: "noPrize",
 
@@ -92,13 +93,13 @@ const HARVEST_CONFIG = {
   //   name          shown to the player
   //   description   shown in the admin panel / README
   //   rule          which reel combinations count as this tier (see below)
-  //   chance        probability per spin: 0.03 = 3%   (not used for the grand)
+  //   chance        probability per spin: 0.03 = 3%   (not used for the grand or Tier 6)
   //   prizeName     PLACEHOLDER - replace with the real prize
   //   prizeCostRM   PLACEHOLDER - what one prize costs you, in RM
   //   startingStock how many of this prize you have at the start
   //
   // RULES (each combination of 3 symbols must match AT MOST ONE tier -
-  // test.html checks this for you; "no prize" = matches none):
+  // test.html checks this for you):
   //   { type: "exactly",      symbol: "plate" }            all 3 are that symbol
   //   { type: "threeOfAKind", except: "plate" }            3 identical, but not this symbol
   //   { type: "anyOrder",     symbols: ["rice","veg","protein"] }  exactly these 3, any order
@@ -106,6 +107,8 @@ const HARVEST_CONFIG = {
   //                                                        but not a pair of this symbol
   //   { type: "exactlyOne",   symbol: "plate" }            exactly one of this symbol,
   //                                                        and the other two all different
+  //   { type: "anyOther" }                                 (last tier only) every combination
+  //                                                        that none of the tiers above wants
   // ---------------------------------------------------------------------
   tiers: [
     {
@@ -158,32 +161,28 @@ const HARVEST_CONFIG = {
       prizeCostRM: 1,
       startingStock: 60,
     },
+    {
+      // Nobody leaves empty-handed: this tier catches every spin that wins nothing above.
+      // It has no "chance" - its chance is whatever is left over (100% minus the tiers above).
+      // Keep an eye on its stock: if it runs out, spins that would land here show
+      // "out of gifts" (the game warns the operator when it is running low).
+      id: "thanks",
+      name: "Tier 6 - Thank-You Gift",
+      description: "Every spin that wins nothing above. Chance = whatever is left over.",
+      rule: { type: "anyOther" },
+      remainder: true,                  // marks this as the catch-all tier
+      prizeName: "Thank-you gift (placeholder)",
+      prizeCostRM: 0.5,
+      startingStock: 100,
+    },
   ],
-  // "No prize" has no entry: its chance is whatever is left over (100% minus the tiers above).
 
   // ---------------------------------------------------------------------
-  // SDG 2 FACTS - shown when a player gets no prize.
-  // !!! PLACEHOLDERS - NOT VERIFIED. Check every one against the FAO / UN
-  // (e.g. the "State of Food Security and Nutrition in the World" report)
-  // before the event, and add the source next to it. Add or remove lines freely.
+  // LOW STOCK WARNING
+  // When the Thank-You Gift stock drops to this number or lower, a warning
+  // appears at the bottom of the screen (operator only).
   // ---------------------------------------------------------------------
-  facts: [
-    "Zero Hunger is Goal 2 of the 17 UN Sustainable Development Goals.",
-    "The goal is to end hunger and all forms of malnutrition by 2030.",
-    "Around 1 in 11 people in the world faced hunger in 2023.",
-    "About 2.8 billion people could not afford a healthy diet in 2022.",
-    "Roughly one third of the food produced for people is lost or wasted.",
-    "Most household food waste could be avoided by planning meals and storing food well.",
-    "Around 150 million children under 5 have stunted growth because of poor nutrition.",
-    "Malnutrition isn't only too little food - missing vitamins and minerals (\"hidden hunger\") counts too.",
-    "More than half of the world's people eat rice as a staple food.",
-    "Small family farms produce a large share of the world's food.",
-    "Growing a variety of crops helps farmers cope when weather or pests hit one harvest.",
-    "Clean water matters for nutrition: unsafe water makes it harder for the body to use food.",
-    "A balanced plate has a staple (like rice), vegetables and protein.",
-    "Malaysia throws away thousands of tonnes of food every day, and much of it is still edible.",
-    "Sharing surplus food with food banks and charities keeps good food out of the bin.",
-  ],
+  lowStockWarning: 10,
 
   // ---------------------------------------------------------------------
   // ADMIN SIMULATION defaults (can also be changed inside the Admin panel)

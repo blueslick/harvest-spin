@@ -28,6 +28,8 @@
   const ids = Config.symbols.map((s) => s.id);
   const ALL = E.enumerateCombos(ids);
   const tierIds = Config.tiers.map((t) => t.id);
+  const thanks = Config.tiers.find((t) => t.remainder).id;      // the thank-you (catch-all) tier
+  const fixedTiers = Config.tiers.filter((t) => !t.remainder);   // tiers with an explicit rule
   const cfg = () => E.clone(Config);                               // a private copy to break on purpose
   const settingsFor = (overrides) => E.resolveSettings(Config, overrides || {});
   const stateAt = (totalSpins, awarded) => Object.assign(E.createInitialState(), { totalSpins, awarded: awarded || {} });
@@ -71,12 +73,12 @@
   // =======================================================================
   test("there are 6^3 = 216 combinations", () => eq(ALL.length, Math.pow(ids.length, 3)));
 
-  test("every combo maps to exactly one outcome (one tier or no prize)", () => {
+  test("every combo maps to exactly one outcome (a tier, including the thank-you tier)", () => {
     ALL.forEach((combo) => {
       const hits = Config.tiers.filter((t) => E.classify(combo, Config) === t.id);
       assert(hits.length <= 1, combo.join() + " matches several tiers");
       const outcome = E.classify(combo, Config);
-      assert(outcome === "none" || tierIds.includes(outcome));
+      assert(tierIds.includes(outcome), "unexpected outcome " + outcome);
     });
   });
 
@@ -90,17 +92,16 @@
       exactlyOne: (c, r) => c.filter((s) => s === r.symbol).length === 1 && new Set(c).size === 3,
     };
     ALL.forEach((combo) => {
-      const hits = Config.tiers.filter((t) => raw[t.rule.type](combo, t.rule));
+      const hits = fixedTiers.filter((t) => raw[t.rule.type](combo, t.rule));
       assert(hits.length <= 1, combo.join() + " claimed by " + hits.map((t) => t.id).join(" & "));
     });
   });
 
-  test("with the default config, pool sizes are 1 / 5 / 6 / 75 / 60 / 69 non-winning (sum 216)", () => {
+  test("with the default config, pool sizes are 1 / 5 / 6 / 75 / 60 / 69 thank-you (sum 216)", () => {
     const t = E.comboTable(Config);
     const sizes = tierIds.map((id) => t[id].length);
-    eq(sizes.join("/"), "1/5/6/75/60", "tier pool sizes");
-    eq(t.none.length, 69, "no-prize pool");
-    eq(sizes.reduce((a, b) => a + b, 0) + t.none.length, 216);
+    eq(sizes.join("/"), "1/5/6/75/60/69", "tier pool sizes");
+    eq(sizes.reduce((a, b) => a + b, 0), 216);
   });
 
   test("known combos land in the right tier", () => {
@@ -117,11 +118,11 @@
     eq(c("plate", "rice", "veg"), "tier5");
     eq(c("rice", "plate", "veg"), "tier5");
     eq(c("rice", "veg", "plate"), "tier5");
-    eq(c("plate", "plate", "rice"), "none", "two plates are not a tier-4 pair");
-    eq(c("rice", "plate", "plate"), "none");
-    eq(c("rice", "veg", "water"), "none");
-    eq(c("bread", "water", "rice"), "none");
-    eq(c("rice", "veg", "bread"), "none", "no protein -> not a balanced plate");
+    eq(c("plate", "plate", "rice"), thanks, "two plates are not a tier-4 pair");
+    eq(c("rice", "plate", "plate"), thanks);
+    eq(c("rice", "veg", "water"), thanks);
+    eq(c("bread", "water", "rice"), thanks);
+    eq(c("rice", "veg", "bread"), thanks, "no protein -> not a balanced plate");
   });
 
   // =======================================================================
@@ -130,23 +131,24 @@
   test("generateCombo only returns combos of the requested tier, and can reach every one", () => {
     ["none"].concat(tierIds).forEach((tier) => {
       const pool = E.comboTable(Config)[tier];
+      const expectedTier = tier === "none" ? thanks : tier;   // "none" (thank-you out of stock) reuses the thank-you pool
       const seen = new Set();
       // sweep the random range evenly so each pool entry is hit
       for (let i = 0; i < pool.length; i++) {
         const combo = E.generateCombo(tier, Config, () => (i + 0.5) / pool.length);
-        eq(E.classify(combo, Config), tier, tier + " produced a combo from another outcome");
+        eq(E.classify(combo, Config), expectedTier, tier + " produced a combo from another outcome");
         seen.add(combo.join());
       }
       eq(seen.size, pool.length, tier + " pool not fully reachable");
     });
   });
 
-  test("no-prize combos are uniform over all non-winning combos (no deliberate near-misses)", () => {
+  test("thank-you combos are uniform over all non-winning combos (no deliberate near-misses)", () => {
     const rng = E.mulberry32(SEED);
-    const pool = E.comboTable(Config).none;
+    const pool = E.comboTable(Config)[thanks];
     const counts = {};
     const N = 69000;
-    for (let i = 0; i < N; i++) { const k = E.generateCombo("none", Config, rng).join(); counts[k] = (counts[k] || 0) + 1; }
+    for (let i = 0; i < N; i++) { const k = E.generateCombo(thanks, Config, rng).join(); counts[k] = (counts[k] || 0) + 1; }
     eq(Object.keys(counts).length, pool.length, "every no-prize combo should appear");
     const expected = N / pool.length;
     const sigma = Math.sqrt(N * (1 / pool.length) * (1 - 1 / pool.length));
@@ -159,7 +161,7 @@
     for (let i = 0; i < 500; i++) {
       if (!E.canSpin(state)) E.startNewPlayer(state, settingsFor(state.overrides));
       const r = E.resolveSpin(state, Config, rng);
-      eq(E.classify(r.symbols, Config), r.tier, "symbols do not match tier at spin " + r.spinNumber);
+      eq(E.classify(r.symbols, Config), r.tier === "none" ? thanks : r.tier, "symbols do not match tier at spin " + r.spinNumber);
       E.commitSpin(state, r);
     }
   });
@@ -184,7 +186,7 @@
     const info = E.computeProbabilities(stateAt(s.grand.guaranteedBySpin - 1), s);
     eq(info.probs.grand, 1);
     tierIds.slice(1).forEach((id) => eq(info.probs[id], 0, id));
-    eq(info.probs.none, 0);
+    eq(info.probs.none + info.probs[thanks], 0, "nothing left for the thank-you tier");
     const rng = E.mulberry32(SEED);
     for (let i = 0; i < 200; i++) eq(E.rollTier(info.probs, info.order, rng), "grand");
   });
@@ -218,12 +220,12 @@
   // =======================================================================
   // PROBABILITIES
   // =======================================================================
-  test("normal spin: exact odds from config, remainder is no prize", () => {
+  test("normal spin: exact odds from config, remainder is the thank-you gift", () => {
     const s = settingsFor(NO_BONUS);
     const p = E.computeProbabilities(stateAt(40), s).probs;
     near(p.grand, 0.001, 1e-12); near(p.tier2, 0.03, 1e-12); near(p.tier3, 0.08, 1e-12);
     near(p.tier4, 0.18, 1e-12); near(p.tier5, 0.25, 1e-12);
-    near(p.none, 1 - 0.001 - 0.54, 1e-12);
+    near(p[thanks], 1 - 0.001 - 0.54, 1e-12); eq(p.none, 0, "nobody is left empty-handed");
     near(sum(p), 1, 1e-12);
   });
 
@@ -263,7 +265,7 @@
     near(info.probs.grand, 0.001, 1e-12, "grand unchanged");
     near(info.probs.tier2, 0.045, 1e-12); near(info.probs.tier3, 0.12, 1e-12);
     near(info.probs.tier4, 0.27, 1e-12); near(info.probs.tier5, 0.375, 1e-12);
-    near(info.probs.none, 1 - 0.001 - 0.81, 1e-12);
+    near(info.probs[thanks], 1 - 0.001 - 0.81, 1e-12);
   });
 
   test("launch bonus: total never exceeds 100% (default 2x on 54% is capped; ratios preserved; grand untouched)", () => {
@@ -271,7 +273,7 @@
     const p = E.computeProbabilities(stateAt(0), s).probs;
     near(sum(p), 1, 1e-12, "total");
     near(p.grand, 0.001, 1e-12, "grand unchanged");
-    near(p.none, 0, 1e-12, "no room left for no prize");
+    near(p[thanks], 0, 1e-12, "no room left for the thank-you gift");
     near(p.tier2 / p.tier5, 0.03 / 0.25, 1e-9, "relative odds preserved");
     assert(p.tier2 > 0.03 && p.tier2 < 0.06, "boosted but capped");
     const huge = E.computeProbabilities(stateAt(0), settingsFor({ "launchBonus.multiplier": 100 })).probs;
@@ -297,11 +299,11 @@
   });
 
   // ---- stock ----
-  test("out of stock (noPrize mode): chance moves to no prize", () => {
+  test("out of stock (noPrize mode): chance falls through to the thank-you gift", () => {
     const s = settingsFor(NO_BONUS);
     const p = E.computeProbabilities(stateAt(40, { tier3: s.tiers[2].startingStock }), s).probs;
     eq(p.tier3, 0);
-    near(p.none, 1 - 0.001 - 0.46, 1e-12);
+    near(p[thanks], 1 - 0.001 - 0.46, 1e-12);
     near(p.tier4, 0.18, 1e-12, "other tiers untouched");
   });
 
@@ -313,7 +315,7 @@
     p = E.computeProbabilities(stateAt(40, { tier3: full("tier3"), tier4: full("tier4") }), s).probs;
     near(p.tier4, 0, 1e-12); near(p.tier5, 0.51, 1e-12, "cascaded through tier4 into tier5");
     p = E.computeProbabilities(stateAt(40, { tier3: full("tier3"), tier4: full("tier4"), tier5: full("tier5") }), s).probs;
-    near(p.tier5, 0, 1e-12); near(p.none, 1 - 0.001 - 0.03, 1e-12, "bottom tier's chance falls to no prize");
+    near(p.tier5, 0, 1e-12); near(p[thanks], 1 - 0.001 - 0.03, 1e-12, "bottom tier's chance falls to the thank-you gift");
     p = E.computeProbabilities(stateAt(40, { tier2: full("tier2") }), s).probs;
     near(p.tier3, 0.11, 1e-12, "tier2's 3% moved to tier3");
   });
@@ -351,7 +353,7 @@
     });
   });
 
-  test("a sold-out tier's combos are never shown (not even as 'no prize')", () => {
+  test("a sold-out tier's combos are never shown (not even as the thank-you gift)", () => {
     const rng = E.mulberry32(SEED);
     const state = E.createInitialState();
     state.overrides = { "tiers.tier3.startingStock": 0 };
@@ -415,19 +417,69 @@
     eq(state.totalSpins, 1);
   });
 
-  test("grand win is recorded (flag + spin number) and no-prize results carry a fact", () => {
+  test("grand win is recorded (flag + spin number)", () => {
     const state = E.createInitialState();
     state.totalSpins = Config.grandPrize.guaranteedBySpin - 1;
     E.startNewPlayer(state, settingsFor());
     const r = E.resolveSpin(state, Config, E.mulberry32(SEED));
-    eq(r.tier, "grand"); eq(r.fact, null);
+    eq(r.tier, "grand"); eq(r.isGrand, true);
     E.commitSpin(state, r);
     eq(state.grandPrizeWon, true); eq(state.grandWonAtSpin, Config.grandPrize.guaranteedBySpin);
-    // find a no-prize spin
+  });
+
+  // =======================================================================
+  // THANK-YOU TIER (nobody leaves empty-handed)
+  // =======================================================================
+  test("thank-you tier: every spin gets a prize while it is in stock (3000 spins, no 'none' outcomes)", () => {
     const rng = E.mulberry32(SEED);
-    let none = null;
-    for (let i = 0; i < 200 && !none; i++) { const x = E.resolveSpin(stateAt(40), Config, rng); if (x.tier === "none") none = x; }
-    assert(none && Config.facts.includes(none.fact), "no-prize result should include one of the config facts");
+    const state = E.createInitialState();
+    state.overrides = { "tiers.thanks.startingStock": 1e9, "tiers.tier5.startingStock": 1e9, "tiers.tier4.startingStock": 1e9 };
+    const t = Config.tiers.find((x) => x.remainder);
+    let thankYous = 0;
+    for (let i = 0; i < 3000; i++) {
+      if (!E.canSpin(state)) E.startNewPlayer(state, E.resolveSettings(Config, state.overrides));
+      const r = E.resolveSpin(state, Config, rng);
+      assert(r.isWin && r.tier !== "none", "empty-handed spin at " + r.spinNumber);
+      assert(r.prizeName && r.prizeName.length > 0, "prize has a name");
+      if (r.tier === thanks) { thankYous++; eq(r.costRM, t.prizeCostRM); eq(r.isThankYou, true); }
+      E.commitSpin(state, r);
+    }
+    assert(thankYous > 500, "thank-you gift should be common, got " + thankYous);
+    eq(state.log.filter((e) => e.tier === "none").length, 0);
+  });
+
+  test("thank-you tier: its chance is the remainder and can't be edited as a fixed chance", () => {
+    assert(!E.tryOverride({}, "tiers." + thanks + ".chance", 0.5, Config).ok, "no such editable setting");
+    const s = settingsFor({ "launchBonus.enabled": false });
+    eq(s.tiers.find((t) => t.id === thanks).chance, null);
+  });
+
+  test("thank-you tier out of stock: spins still resolve, shown as 'none' with non-winning symbols, with a clear name", () => {
+    const state = E.createInitialState();
+    state.overrides = { "tiers.thanks.startingStock": 0, "launchBonus.enabled": false };
+    const rng = E.mulberry32(SEED);
+    let nones = 0;
+    for (let i = 0; i < 2000; i++) {
+      const r = E.resolveSpin(state, Config, rng);
+      if (r.tier === "none") {
+        nones++;
+        eq(r.isWin, false); eq(r.tierName, "Out of gifts");
+        eq(E.classify(r.symbols, Config), thanks, "symbols are non-winning");
+      }
+    }
+    assert(nones > 500, "should hit the 'none' fallback a lot with no stock, got " + nones);
+  });
+
+  test("thank-you tier: nextLowerTier mode gives the same result (everything lands on the thank-you tier)", () => {
+    const a = E.computeProbabilities(stateAt(40, { tier3: 99 }), settingsFor({ "launchBonus.enabled": false, outOfStock: "nextLowerTier" })).probs;
+    near(a.tier4, 0.26, 1e-12); near(a[thanks] + a.tier4 + a.tier5 + a.tier2 + a.grand, 1, 1e-12);
+  });
+
+  test("validation: thank-you tier is allowed once, and fixed tiers still can't overlap", () => {
+    const two = cfg(); two.tiers[4].remainder = true;
+    assert(E.validateConfig(two).some((p) => /only one tier can have remainder/i.test(p)));
+    const noThanks = cfg(); noThanks.tiers = noThanks.tiers.filter((t) => !t.remainder);
+    eq(E.validateConfig(noThanks).length, 0, "game still valid without a thank-you tier");
   });
 
   test("state survives a JSON round trip (what localStorage does); corrupt data is rejected", () => {
@@ -437,6 +489,9 @@
     const back = E.normalizeState(JSON.parse(JSON.stringify(state)));
     eq(JSON.stringify(back), JSON.stringify(state));
     eq(E.normalizeState(null), null); eq(E.normalizeState({ totalSpins: -3 }), null); eq(E.normalizeState({ log: "x" }), null);
+    eq(E.normalizeState({ nope: 1 }, true), null, "a random JSON file is not a backup");
+    eq(E.normalizeState({ totalSpins: 5 }, true), null, "partial data is not a backup");
+    eq(JSON.stringify(E.normalizeState(JSON.parse(JSON.stringify(state)), true)), JSON.stringify(state), "a real backup restores exactly");
   });
 
   test("full reset wipes event data but keeps admin overrides", () => {
@@ -486,7 +541,8 @@
   // =======================================================================
   test("expected cost per spin = sum(chance x prize cost)", () => {
     const s = settingsFor(NO_BONUS);
-    const expected = 0.001 * 50 + 0.03 * 10 + 0.08 * 5 + 0.18 * 2 + 0.25 * 1;
+    const tc = Config.tiers.find((t) => t.remainder).prizeCostRM;
+    const expected = 0.001 * 50 + 0.03 * 10 + 0.08 * 5 + 0.18 * 2 + 0.25 * 1 + (1 - 0.001 - 0.54) * tc;
     near(E.expectedCostNextSpin(stateAt(40), s), expected, 1e-9);
   });
 
@@ -528,7 +584,7 @@
   });
 
   test("projected event cost agrees with simulation (stock made unlimited to compare like with like)", () => {
-    const big = { "tiers.tier2.startingStock": 1e6, "tiers.tier3.startingStock": 1e6, "tiers.tier4.startingStock": 1e6, "tiers.tier5.startingStock": 1e6 };
+    const big = { "tiers.tier2.startingStock": 1e6, "tiers.tier3.startingStock": 1e6, "tiers.tier4.startingStock": 1e6, "tiers.tier5.startingStock": 1e6, "tiers.thanks.startingStock": 1e6 };
     const s = settingsFor(big);
     const proj = E.projectEventCost(s, 150);
     const sim = E.runSimulation(s, 8000, 150, E.mulberry32(SEED));
@@ -540,7 +596,8 @@
   test("projected cost with the grand already claimed excludes the grand", () => {
     const s = settingsFor(Object.assign({ "tiers.grand.startingStock": 0 }, NO_BONUS));
     const proj = E.projectEventCost(s, 100);
-    near(proj.total, 100 * (0.03 * 10 + 0.08 * 5 + 0.18 * 2 + 0.25 * 1), 1e-6);
+    const tc = Config.tiers.find((t) => t.remainder).prizeCostRM;
+    near(proj.total, 100 * (0.03 * 10 + 0.08 * 5 + 0.18 * 2 + 0.25 * 1 + 0.46 * tc), 1e-6);
   });
 
   // =======================================================================
