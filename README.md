@@ -16,7 +16,7 @@ Plain HTML + CSS + vanilla JavaScript. No frameworks, no build step, no server, 
 4. [Editing `config.js`](#editing-configjs)
 5. [How the odds work](#how-the-odds-work)
 6. [Admin panel](#admin-panel)
-7. [Saved data and CSV export](#saved-data-and-csv-export)
+7. [Saved data and CSV export](#saved-data-and-csv-export), [Backups](#backups-keeping-the-data-safe) and [Google Sheets sync](#google-sheets-sync)
 8. [Tests](#tests)
 9. [Working together with git](#working-together-with-git)
 10. [For the designer](#for-the-designer)
@@ -25,9 +25,16 @@ Plain HTML + CSS + vanilla JavaScript. No frameworks, no build step, no server, 
 
 ## Run it
 
-- **Play:** double-click `index.html` (works from your file system in Chrome, Edge, Firefox, Safari).
-- **Check everything is healthy:** double-click `test.html`. It should say *"All N tests passed"* in green.
-- **Optional (terminal):** `node tests.js` runs the same tests. Node is only needed for this; the game itself never needs it.
+> **Run it from a copy on your own computer, not from github.com.** On GitHub, clicking a file only shows its source code. That's what you see if `index.html` "opens as code".
+
+1. **Get a copy.** On the repo page click the green **Code** button → **Download ZIP**, then **unzip it** (right-click → *Extract All* on Windows; don't open files from inside the ZIP). Or clone it with GitHub Desktop (see [Working together with git](#working-together-with-git)).
+2. **Open the unzipped folder** in File Explorer / Finder and **double-click `index.html`**. It opens in your web browser as the game.
+3. **Check everything is healthy:** double-click `test.html`. It should say *"All N tests passed"* in green.
+
+Optional extras:
+
+- `node tests.js` runs the same tests in a terminal (Node is only needed for this; the game never needs it).
+- **A shareable link instead of files:** in the repo's *Settings → Pages*, choose *Deploy from a branch → main → / (root)*. GitHub then serves the game at `https://blueslick.github.io/harvest-spin/` (free for public repos). Handy for showing the designer or testing on a phone. The game data on that link is stored separately from the file version, so use one or the other for the actual event. For the booth, a local copy is safer because it needs no internet to start.
 
 ## Files
 
@@ -38,6 +45,7 @@ Plain HTML + CSS + vanilla JavaScript. No frameworks, no build step, no server, 
 | `ui.js` | DOM, reel animation, buttons, admin panel, saving to the browser | Developer |
 | `index.html`, `style.css` | Page structure and look | Designer |
 | `tests.js`, `test.html` | Automated checks (same tests, two ways to run them) | Developer |
+| `apps-script/` | The Google Sheets receiver (`Code.gs`) and its test (`node apps-script/test.js`) | Developer |
 
 The logic/presentation split is strict: `engine.js` knows nothing about the page, and `ui.js` never makes a game decision. It asks the engine and draws the answer.
 
@@ -67,6 +75,7 @@ What's in it:
 | Section | Controls |
 |---|---|
 | `spinsPerPlayer` | Spins each player gets |
+| `adminPin` | PIN for the hidden admin panel (`""` = no PIN) |
 | `symbols` | The six reel symbols (id, emoji, name) |
 | `grandPrize` | Rising-odds schedule: `baseChance`, `rampStartSpin`, `rampStep`, `guaranteedBySpin` |
 | `launchBonus` | `enabled`, `spins`, `multiplier` |
@@ -152,7 +161,9 @@ The grand prize's chance **always** falls through to the Thank-You Gift when it 
 
 ## Admin panel
 
-Open with **Ctrl+Shift+A** (Esc closes it). If your browser keeps that shortcut for itself, add `#admin` to the end of the page address instead (`.../index.html#admin`).
+Open with **Ctrl+Shift+A**, then enter the PIN (set as `adminPin` in `config.js`; Esc closes the panel, and the PIN is asked again next time). Five wrong tries lock the prompt for 30 seconds. If your browser keeps that shortcut for itself, add `#admin` to the end of the page address instead (`.../index.html#admin`).
+
+> The PIN is stored in `config.js`, which anyone who can see the repo can read. It stops curious visitors at the booth, but it isn't real security, so don't reuse it for anything else.
 
 - **Live stats:** total spins, players, current grand chance, prizes given, stock, cost given, and each outcome's chance on the next spin.
 - **Odds, stock and prizes:** edit chances, prize names and costs, stock remaining, the grand prize schedule, the launch bonus (on/off, spins, multiplier), spins per player, and the out-of-stock rule. Changes save instantly and invalid values are rejected with a message (for example, tier chances totalling more than 100%). **Reset odds & settings to config.js defaults** clears all admin edits (it keeps the log and prizes already given).
@@ -179,6 +190,30 @@ Game data lives in the browser's localStorage, which survives refreshes but **no
 
 Also **Export CSV** regularly for the human-readable log. If you want the log in a Google Sheet automatically, that needs an internet connection at the booth and a small Google Apps Script. It is not built in yet.
 
+## Google Sheets sync
+
+Every spin is copied to a Google Sheet as it happens, so the log exists off the laptop. The game keeps working without internet: spins queue up and are sent when the connection returns. The sheet ignores duplicates, so re-sending is always safe.
+
+**One-time setup (about 5 minutes):**
+
+1. Create a new Google Sheet (any name).
+2. In it: **Extensions → Apps Script**. Delete the sample code, paste in everything from `apps-script/Code.gs`.
+3. Near the top, change `var TOKEN = 'change-me';` to your own secret word or number.
+4. Click **Deploy → New deployment**. Click the gear and choose **Web app**. Set *Execute as*: **Me** and *Who has access*: **Anyone**. Click **Deploy**, then approve the permissions (Google warns the app is unverified because you wrote it; that's expected: *Advanced → Go to … (unsafe)*).
+5. Copy the **Web app URL** (it ends in `/exec`).
+6. In the game: **Ctrl+Shift+A** → PIN → **Google Sheets sync**. Paste the URL and the same secret token, click **Save**, then **Send test row**. You should see *Connected*, and a row in a **Connection test** tab in your sheet.
+
+After that, a **Spins** tab fills automatically. A line at the bottom of the game screen shows the status (*3 spins saved ✔*, or *offline, N waiting*).
+
+Notes:
+
+- The URL and token are stored in the browser only. They are **not** in the repository, the backups, or the game data. Don't paste them into `config.js` or commit them.
+- "Anyone" means anyone who knows the long URL can reach it, but without your secret token the script rejects them.
+- If you edit `Code.gs` later, redeploy (**Deploy → Manage deployments → edit → New version**).
+- **Before the real event,** clear the **Spins** tab (or rename it) so test spins don't mix with the real ones. A Full reset restarts spin numbers at 1 and new spins are added under the old ones.
+- **Resend all spins** (Admin panel) fills in any gaps. Some browsers don't let the page read Google's reply, in which case the status says *sent (can't confirm)*; look at the sheet to make sure rows appear.
+- Test the receiver's logic with `node apps-script/test.js` (uses a fake Google; it can't test your real deployment, which is what *Send test row* is for).
+
 ## Tests
 
 `test.html` (or `node tests.js`) checks the engine against the **current** `config.js`, including:
@@ -192,7 +227,7 @@ Also **Export CSV** regularly for the human-readable log. If you want the log in
 - stock handling in both modes, and that nothing out of stock is ever awarded;
 - logging, player flow, saving and loading, full reset;
 - the simulation leaves its (frozen) inputs untouched, and agrees with the budget projection;
-- CSV escaping.
+- CSV escaping, the admin PIN check, and that sheet rows match the CSV columns.
 
 **Run them after every change to `config.js` or the engine, and before pushing.**
 
@@ -253,6 +288,8 @@ git push -u origin restyle-reels      # then open a Pull Request on GitHub
 `.gitignore` excludes `*.csv` and `exports/`. Don't commit the exported log, and don't commit real prize-sponsor details you want kept private.
 
 ## For the designer
+
+**Recommended workflow.** Design in whatever tool is comfortable (Figma is the best fit; Canva works too if the designer is less technical): a single mobile-or-laptop-sized screen with the meter, the three reels, the Harvest! button and the result panel, plus the six symbols as icons. Hand over the Figma link or exported images, then either the designer writes the CSS in `style.css` or the developer builds it from the mock-up (Claude can read a Figma file and write the matching CSS). The game is plain HTML/CSS, so you can also skip mock-ups and tweak `style.css` live in the browser (right-click → Inspect). If you want custom icons instead of emoji, ask the developer to add an image option for symbols (a small change).
 
 You can restyle freely in `style.css`, and restructure `index.html` as long as you keep the IDs. `ui.js` never sets colours or sizes. It only toggles these hooks:
 
