@@ -23,12 +23,21 @@
   let storageOk = true;
   let simRunning = false;
 
+  // auto-backup to a file on disk (Chrome / Edge only)
+  const canAutoBackup = typeof window.showSaveFilePicker === "function";
+  let backupHandle = null;
+  let backupBusy = false;
+  let backupDirty = false;
+  let backupText = "";
+
   const $ = (id) => document.getElementById(id);
   const settings = () => E.resolveSettings(CONFIG, state.overrides);
   const emojiOf = (id) => (CONFIG.symbols.find((s) => s.id === id) || {}).emoji || "?";
   const fmtRM = (n) => CUR + " " + (Math.round(n * 100) / 100).toFixed(2);
   const fmtPct = (p) => (p * 100).toFixed(p > 0 && p < 0.01 ? 2 : 1) + "%";
   const fmtInt = (n) => Number(n).toLocaleString();
+  const pad2 = (n) => String(n).padStart(2, "0");
+  const stamp = () => { const d = new Date(); return d.getFullYear() + pad2(d.getMonth() + 1) + pad2(d.getDate()) + "-" + pad2(d.getHours()) + pad2(d.getMinutes()); };
 
   /** Tiny element builder. Text is always inserted as text (never HTML). */
   function h(tag, attrs) {
@@ -74,6 +83,100 @@
       storageOk = false;
     }
     $("storage-warning").hidden = storageOk;
+    queueBackup();
+  }
+
+  // =======================================================================
+  // BACKUPS (so a cleared browser doesn't lose the event)
+  // =======================================================================
+  function downloadBlob(blob, name) {
+    const a = h("a", { href: URL.createObjectURL(blob), download: name });
+    document.body.append(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  }
+
+  /** Full backup (everything, including the log and admin settings) as a JSON file. */
+  function downloadBackup() {
+    downloadBlob(new Blob([JSON.stringify(state, null, 1)], { type: "application/json" }), "harvest-spin-backup-" + stamp() + ".json");
+  }
+
+  function renderBackupStatus() {
+    const status = $("backup-status");
+    const btn = $("backup-btn");
+    if (!canAutoBackup) {
+      status.textContent = "Auto-backup needs Chrome or Edge.";
+      btn.textContent = "Download backup";
+    } else if (!backupHandle) {
+      status.textContent = "\u26A0\uFE0F No backup file set \u2014 data lives only in this browser.";
+      btn.textContent = "Set up auto-backup";
+    } else {
+      status.textContent = backupText;
+      btn.textContent = "Change backup file";
+    }
+  }
+
+  async function chooseBackupFile() {
+    if (!canAutoBackup) { downloadBackup(); return; }
+    try {
+      backupHandle = await window.showSaveFilePicker({
+        suggestedName: "harvest-spin-backup.json",
+        types: [{ description: "Harvest Spin backup", accept: { "application/json": [".json"] } }],
+      });
+      backupText = "Backup file chosen.";
+      queueBackup();
+    } catch (e) {
+      if (e && e.name !== "AbortError") alert("Couldn't set up the backup file: " + e.message);
+    }
+    renderBackupStatus();
+  }
+
+  /** Write the state to the backup file after every save (writes are queued so they never overlap). */
+  function queueBackup() {
+    if (!backupHandle) return;
+    backupDirty = true;
+    if (backupBusy) return;
+    backupBusy = true;
+    (async () => {
+      while (backupDirty) {
+        backupDirty = false;
+        try {
+          const w = await backupHandle.createWritable();
+          await w.write(JSON.stringify(state, null, 1));
+          await w.close();
+          const d = new Date();
+          backupText = "Backup saved " + pad2(d.getHours()) + ":" + pad2(d.getMinutes()) + ":" + pad2(d.getSeconds());
+        } catch (e) {
+          backupText = "\u26A0\uFE0F Backup FAILED \u2014 click \"Change backup file\".";
+        }
+        renderBackupStatus();
+      }
+      backupBusy = false;
+    })();
+  }
+
+  function restoreFromFile(file) {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      let parsed = null;
+      try { parsed = E.normalizeState(JSON.parse(reader.result), true); } catch (e) { parsed = null; }
+      if (!parsed || E.validateSettings(E.resolveSettings(CONFIG, parsed.overrides)).length) {
+        alert("That file isn't a valid Harvest Spin backup, so nothing was changed.");
+        return;
+      }
+      if (!confirm("Replace the current game data (" + state.totalSpins + " spins, " + state.playerCount + " players) with the backup (" +
+        parsed.totalSpins + " spins, " + parsed.playerCount + " players)?")) return;
+      state = parsed;
+      saveState();
+      showLastResult();
+      renderMain();
+      buildAdmin();
+      refreshAdmin();
+      setMsg("Backup restored.", false);
+    };
+    reader.readAsText(file);
   }
 
   // =======================================================================
@@ -111,6 +214,15 @@
     $("spins-left").textContent = p ? p.spinsLeft : 0;
     $("new-player-btn").disabled = spinning;
     $("spin-btn").disabled = spinning || !E.canSpin(state);
+    // operator warning: the thank-you gift is what keeps nobody empty-handed
+    const thanksTier = s.tiers.find((t) => t.remainder);
+    const thanksLeft = thanksTier ? E.stockOf(state, s, thanksTier.id) : Infinity;
+    const warn = $("stock-warning");
+    warn.hidden = !(thanksLeft <= (CONFIG.lowStockWarning || 10));
+    warn.textContent = thanksLeft === 0
+      ? "\u26A0\uFE0F OUT of " + thanksTier.prizeName + "! Restock in the Admin panel."
+      : "\u26A0\uFE0F Only " + thanksLeft + " \"" + (thanksTier || {}).prizeName + "\" left.";
+
     $("spin-hint").textContent = spinning ? "Spinning..."
       : !p ? 'Press "New Player" to begin.'
       : p.spinsLeft === 0 ? 'No spins left — press "New Player" for the next player.'
@@ -134,8 +246,20 @@
       $("result-title").textContent = r.tierName;
       $("result-body").textContent = "You won: " + r.prizeName + (r.isGrand ? " 🏆" : "");
     } else {
-      $("result-title").textContent = "No prize this time";
-      $("result-body").textContent = r.fact ? "Did you know? " + r.fact : "Thanks for playing!";
+      // only happens if the thank-you gift has run out of stock
+      $("result-title").textContent = "Thanks for playing!";
+      $("result-body").textContent = "We've run out of gifts \u2014 please see the volunteer.";
+    }
+  }
+
+  /** Show the last spin (after a refresh, or after restoring a backup). */
+  function showLastResult() {
+    if (state.lastResult) {
+      setReels(state.lastResult.symbols);
+      showResult(state.lastResult);
+    } else {
+      setReels(null);
+      showResult(null);
     }
   }
 
@@ -206,16 +330,8 @@
   // CSV EXPORT
   // =======================================================================
   function exportCsv() {
-    const d = new Date();
-    const pad = (n) => String(n).padStart(2, "0");
-    const stamp = d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate()) + "-" + pad(d.getHours()) + pad(d.getMinutes());
     // BOM so Excel reads the emoji as UTF-8
-    const blob = new Blob(["﻿" + E.logToCsv(state.log)], { type: "text/csv;charset=utf-8" });
-    const a = h("a", { href: URL.createObjectURL(blob), download: "harvest-spin-log-" + stamp + ".csv" });
-    document.body.append(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    downloadBlob(new Blob(["\uFEFF" + E.logToCsv(state.log)], { type: "text/csv;charset=utf-8" }), "harvest-spin-log-" + stamp() + ".csv");
   }
 
   // =======================================================================
@@ -310,7 +426,20 @@
     buildSettings();
     buildBudget();
     buildSim();
+    buildBackup();
     buildDanger();
+  }
+
+  function buildBackup() {
+    const file = h("input", { type: "file", accept: ".json,application/json" });
+    file.addEventListener("change", () => { restoreFromFile(file.files[0]); file.value = ""; });
+    $("admin-backup-body").replaceChildren(
+      h("p", {}, "Game data is stored in this browser. Keep a copy somewhere else too:"),
+      h("p", {}, h("button", { type: "button", onclick: chooseBackupFile }, canAutoBackup ? "Set up auto-backup file..." : "Download backup"),
+        " ", canAutoBackup ? h("button", { type: "button", onclick: downloadBackup }, "Download backup now") : null),
+      h("p", {}, h("label", {}, "Restore from a backup file: ", file)),
+      h("p", { class: "admin-note" }, "Auto-backup (Chrome/Edge) writes the full game data to a file you choose after every spin; you have to pick the file again after reloading the page. " +
+        "Restore replaces everything (spins, log, stock, settings) with the backup."));
   }
 
   function buildSettings() {
@@ -325,6 +454,7 @@
         h("td", {}, t.name),
         h("td", {}, t.risingOdds
           ? "rising (see below)"
+          : t.remainder ? "the remainder"
           : makeField({ key: "tiers." + id + ".chance", kind: "percent", label: "chance", read: (s) => tierOf(s, id).chance })),
         h("td", {}, makeField({ key: "tiers." + id + ".prizeName", kind: "text", label: "prize name", read: (s) => tierOf(s, id).prizeName })),
         h("td", {}, makeField({ key: "tiers." + id + ".prizeCostRM", kind: "number", label: "prize cost", min: 0, read: (s) => tierOf(s, id).prizeCostRM })),
@@ -393,7 +523,10 @@
       h("td", {}, String(state.awarded[t.id] || 0)),
       h("td", {}, String(E.stockOf(state, s, t.id))),
       h("td", {}, fmtRM(costGiven[t.id] || 0))));
-    rows.push(h("tr", {}, h("td", {}, "No prize"), h("td", {}, fmtPct(info.probs.none)), h("td", {}, String(state.log.filter((e) => e.tier === "none").length)), h("td", {}, "-"), h("td", {}, "-")));
+    const nones = state.log.filter((e) => e.tier === "none").length;
+    if (nones > 0 || info.probs.none > 0) {
+      rows.push(h("tr", {}, h("td", {}, "Out of gifts (nothing to give)"), h("td", {}, fmtPct(info.probs.none)), h("td", {}, String(nones)), h("td", {}, "-"), h("td", {}, "-")));
+    }
 
     const table = h("table", {},
       h("thead", {}, h("tr", {}, ["Outcome", "Chance on next spin", "Given", "In stock", "Cost given"].map((x) => h("th", {}, x)))),
@@ -487,8 +620,8 @@
     const cancel = h("button", { type: "button" }, "Cancel");
     const box = h("div", { class: "danger-box", hidden: true },
       h("p", {}, "This erases the spin log, spin count, player count and prizes given, and puts all stock back to its starting amount. " +
-        "Odds and settings are kept. Export the CSV first if you need the data."),
-      h("p", {}, h("button", { type: "button", onclick: exportCsv }, "Export CSV now")),
+        "Odds and settings are kept. If auto-backup is on, the backup file is overwritten with the empty event too, so download what you need first."),
+      h("p", {}, h("button", { type: "button", onclick: exportCsv }, "Export CSV now"), " ", h("button", { type: "button", onclick: downloadBackup }, "Download backup now")),
       h("p", {}, "Type RESET to confirm: ", typed),
       h("p", {}, wipe, " ", cancel));
     const open = h("button", { type: "button", class: "danger" }, "Full reset (start of event)...");
@@ -546,6 +679,7 @@
     $("spin-btn").addEventListener("click", onSpin);
     $("new-player-btn").addEventListener("click", onNewPlayer);
     $("export-btn").addEventListener("click", exportCsv);
+    $("backup-btn").addEventListener("click", chooseBackupFile);
     $("admin-close").addEventListener("click", closeAdmin);
     $("admin").addEventListener("mousedown", (e) => { if (e.target === $("admin")) closeAdmin(); });
 
@@ -560,13 +694,8 @@
     // Fallback if the browser keeps Ctrl+Shift+A for itself: add #admin to the address.
     window.addEventListener("hashchange", () => { if (location.hash === "#admin") openAdmin(); });
 
-    // Show what the last spin was (e.g. after a refresh)
-    if (state.lastResult) {
-      setReels(state.lastResult.symbols);
-      showResult(state.lastResult);
-    } else {
-      setReels(null);
-    }
+    showLastResult();
+    renderBackupStatus();
     renderMain();
     if (location.hash === "#admin") openAdmin();
   }

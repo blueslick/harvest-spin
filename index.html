@@ -51,7 +51,12 @@
   </main>
 
   <footer id="operator-bar">
-    <button id="export-btn" type="button">Export CSV</button>
+    <p id="stock-warning" class="warn-text" hidden></p>
+    <p>
+      <span id="backup-status"></span>
+      <button id="backup-btn" type="button">Set up auto-backup</button>
+      <button id="export-btn" type="button">Export CSV</button>
+    </p>
   </footer>
 
   <!-- Hidden admin panel: Ctrl+Shift+A (or add #admin to the address). Content is built by ui.js. -->
@@ -83,6 +88,11 @@
       <section id="admin-sim">
         <h3>Simulation</h3>
         <div id="admin-sim-body"></div>
+      </section>
+
+      <section id="admin-backup">
+        <h3>Backup &amp; restore</h3>
+        <div id="admin-backup-body"></div>
       </section>
 
       <section id="admin-danger">
