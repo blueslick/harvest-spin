@@ -1,0 +1,15 @@
+# Event data exported from the machine (contains the spin log) - keep out of git
+*.csv
+exports/
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+*.swp
+*~
+.vscode/
+.idea/
+
+# Node (only used for `node tests.js`; nothing to install)
+node_modules/
+npm-debug.log*
