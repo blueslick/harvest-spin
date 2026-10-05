@@ -273,6 +273,7 @@ const HarvestEngine = (function () {
 
     p.push.apply(p, validateSettings(baseSettings(config)));
 
+    if (config.adminPin !== undefined && typeof config.adminPin !== "string") p.push('adminPin must be text in quotes, e.g. "123456" (or "" for no PIN).');
     const stops = config.animation && config.animation.reelStopTimesMs;
     if (!(Array.isArray(stops) && stops.length === 3 && stops.every((x, i) => isNum(x) && x > 0 && (i === 0 || x > stops[i - 1])))) {
       p.push("animation.reelStopTimesMs must be 3 increasing numbers, e.g. [1300, 2000, 2700].");
@@ -620,10 +621,25 @@ const HarvestEngine = (function () {
     return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
   }
 
+  /** Column names for the CSV export and the Google Sheet, in order. */
+  const LOG_COLUMNS = ["timestamp", "spin_number", "player_number", "player_spin", "outcome_tier", "tier_name", "prize", "prize_cost_rm", "symbols", "launch_bonus_active"];
+
+  /** One log entry as an array of cell values, in LOG_COLUMNS order. */
+  function logRow(e) {
+    return [e.timestamp, e.spinNumber, e.player, e.playerSpin, e.tier, e.tierName, e.prize, e.costRM, e.emoji, e.launchBonus ? "yes" : "no"];
+  }
+
   function logToCsv(log) {
-    const header = ["timestamp", "spin_number", "player_number", "player_spin", "outcome_tier", "tier_name", "prize", "prize_cost_rm", "symbols", "launch_bonus_active"];
-    const rows = log.map((e) => [e.timestamp, e.spinNumber, e.player, e.playerSpin, e.tier, e.tierName, e.prize, e.costRM, e.emoji, e.launchBonus ? "yes" : "no"]);
-    return [header].concat(rows).map((r) => r.map(csvCell).join(",")).join("\r\n") + "\r\n";
+    return [LOG_COLUMNS].concat(log.map(logRow)).map((r) => r.map(csvCell).join(",")).join("\r\n") + "\r\n";
+  }
+
+  // -----------------------------------------------------------------------
+  // 11. ADMIN PIN
+  // -----------------------------------------------------------------------
+  /** True if `entered` matches config.adminPin (or no PIN is set). Just a deterrent: the PIN is readable in config.js. */
+  function pinOk(config, entered) {
+    const pin = String(config.adminPin === undefined || config.adminPin === null ? "" : config.adminPin);
+    return pin === "" || String(entered === undefined || entered === null ? "" : entered).trim() === pin;
   }
 
   // -----------------------------------------------------------------------
@@ -643,7 +659,9 @@ const HarvestEngine = (function () {
     // budget & simulation
     expectedCostNextSpin, projectEventCost, simulateEvent, summarizeSimulation, runSimulation,
     // export
-    logToCsv,
+    logToCsv, logRow, LOG_COLUMNS,
+    // admin
+    pinOk,
   };
 })();
 

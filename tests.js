@@ -617,6 +617,30 @@
   });
 
   // =======================================================================
+  // ADMIN PIN & SHEET ROWS
+  // =======================================================================
+  test("admin PIN: right PIN opens, wrong/empty does not; blank config PIN means no PIN", () => {
+    eq(Config.adminPin, "140311");
+    assert(E.pinOk(Config, "140311"));
+    assert(E.pinOk(Config, " 140311 "), "surrounding spaces are ignored");
+    assert(!E.pinOk(Config, "140312")); assert(!E.pinOk(Config, "")); assert(!E.pinOk(Config, undefined)); assert(!E.pinOk(Config, "14031"));
+    assert(E.pinOk({ adminPin: "" }, "anything")); assert(E.pinOk({}, ""));
+    assert(E.validateConfig(Object.assign(cfg(), { adminPin: 140311 })).some((p) => /adminPin/.test(p)), "a number PIN (no quotes) is flagged");
+  });
+
+  test("sheet rows: same columns and values as the CSV", () => {
+    const state = E.createInitialState();
+    E.startNewPlayer(state, settingsFor());
+    const rng = E.mulberry32(SEED);
+    for (let i = 0; i < 3; i++) E.commitSpin(state, E.resolveSpin(state, Config, rng));
+    state.log.forEach((e) => eq(E.logRow(e).length, E.LOG_COLUMNS.length));
+    eq(E.logRow(state.log[0])[1], 1, "spin number"); eq(E.logRow(state.log[0])[9], "yes", "bonus flag");
+    const csv = E.logToCsv(state.log).trim().split("\r\n");
+    eq(csv[0], E.LOG_COLUMNS.join(","));
+    eq(csv[1].split(",")[1], "1");
+  });
+
+  // =======================================================================
   // RUNNER
   // =======================================================================
   function runAll() {

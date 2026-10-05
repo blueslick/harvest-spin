@@ -29,6 +29,12 @@ const HARVEST_CONFIG = {
   // How many spins one player gets when you press "New Player".
   spinsPerPlayer: 3,
 
+  // PIN needed to open the hidden Admin panel (Ctrl+Shift+A). Keep the quotes.
+  // Use "" for no PIN. NOTE: this file is visible to anyone who can see the
+  // GitHub repo, so this only keeps curious visitors out of the admin panel;
+  // it is not real security. Don't reuse this PIN anywhere else.
+  adminPin: "140311",
+
   // ---------------------------------------------------------------------
   // SYMBOLS (the 3 reels all use these)
   // "id" is used internally by the tier rules below - don't rename an id
