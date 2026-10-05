@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Harvest Spin - Tests</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 52rem; margin: 2rem auto; padding: 0 1rem; }
+    #summary { font-size: 1.3rem; font-weight: bold; padding: .6rem 1rem; border-radius: 6px; }
+    #summary.pass { background: #d8f5d8; color: #145214; }
+    #summary.fail { background: #fbd9d9; color: #7a1010; }
+    ul { list-style: none; padding: 0; }
+    li { padding: .25rem .5rem; border-bottom: 1px solid #eee; }
+    li.pass::before { content: "PASS  "; color: #1a7a1a; font-weight: bold; }
+    li.fail::before { content: "FAIL  "; color: #b00020; font-weight: bold; }
+    .err { display: block; color: #b00020; font-family: monospace; margin-left: 3.2rem; }
+  </style>
+</head>
+<body>
+  <h1>Harvest Spin - tests</h1>
+  <p>Checks the engine against the current <code>config.js</code>. Everything should be green. These tests never touch the saved game.</p>
+  <div id="summary">Running...</div>
+  <ul id="results"></ul>
+
+  <script src="config.js"></script>
+  <script src="engine.js"></script>
+  <script src="tests.js"></script>
+  <script>
+    setTimeout(function () {
+      var results = window.HarvestTests.runAll();
+      var failed = results.filter(function (r) { return !r.ok; }).length;
+      var list = document.getElementById("results");
+      results.forEach(function (r) {
+        var li = document.createElement("li");
+        li.className = r.ok ? "pass" : "fail";
+        li.textContent = r.name;
+        if (!r.ok) {
+          var err = document.createElement("span");
+          err.className = "err";
+          err.textContent = r.error;
+          li.appendChild(err);
+        }
+        list.appendChild(li);
+      });
+      var s = document.getElementById("summary");
+      s.className = failed ? "fail" : "pass";
+      s.textContent = failed ? failed + " of " + results.length + " tests FAILED" : "All " + results.length + " tests passed";
+    }, 20);
+  </script>
+</body>
+</html>

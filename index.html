@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Harvest Spin</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- Warnings (hidden unless something is wrong) -->
+  <div id="config-errors" class="error-banner" hidden></div>
+  <div id="storage-warning" class="warn-banner" hidden></div>
+
+  <main id="app">
+    <header id="header">
+      <h1 id="title">Harvest Spin</h1>
+      <p id="tagline"></p>
+    </header>
+
+    <div id="launch-banner" class="banner" hidden></div>
+
+    <section id="meter" aria-label="Harvest Meter">
+      <div class="meter-head">
+        <span class="meter-title">Harvest Meter</span>
+        <span id="meter-text"></span>
+      </div>
+      <div class="meter-track"><div id="meter-fill"></div></div>
+      <p id="meter-rule"></p>
+    </section>
+
+    <section id="player-panel">
+      <div class="player-stat">Player <strong id="player-number">-</strong></div>
+      <div class="player-stat">Spins remaining <strong id="spins-left">0</strong></div>
+      <button id="new-player-btn" type="button">New Player</button>
+    </section>
+
+    <section id="reels" aria-label="Reels">
+      <div class="reel"><span class="symbol">?</span></div>
+      <div class="reel"><span class="symbol">?</span></div>
+      <div class="reel"><span class="symbol">?</span></div>
+    </section>
+
+    <button id="spin-btn" type="button" disabled>Harvest!</button>
+    <p id="spin-hint"></p>
+
+    <section id="result" aria-live="polite" hidden>
+      <h2 id="result-title"></h2>
+      <p id="result-body"></p>
+    </section>
+  </main>
+
+  <footer id="operator-bar">
+    <button id="export-btn" type="button">Export CSV</button>
+  </footer>
+
+  <!-- Hidden admin panel: Ctrl+Shift+A (or add #admin to the address). Content is built by ui.js. -->
+  <div id="admin" class="admin-overlay" hidden>
+    <div class="admin-panel" role="dialog" aria-modal="true" aria-labelledby="admin-title">
+      <div class="admin-head">
+        <h2 id="admin-title">Admin panel</h2>
+        <button id="admin-close" type="button">Close (Esc)</button>
+      </div>
+
+      <section id="admin-stats">
+        <h3>Live stats</h3>
+        <div id="admin-stats-body"></div>
+      </section>
+
+      <section id="admin-settings">
+        <h3>Odds, stock and prizes</h3>
+        <p class="admin-note">Changes save instantly. <span class="overridden-sample">Highlighted</span> fields differ from config.js.</p>
+        <div id="admin-settings-body"></div>
+        <p id="admin-settings-msg" role="status"></p>
+        <button id="reset-settings-btn" type="button">Reset odds &amp; settings to config.js defaults</button>
+      </section>
+
+      <section id="admin-budget">
+        <h3>Budget calculator</h3>
+        <div id="admin-budget-body"></div>
+      </section>
+
+      <section id="admin-sim">
+        <h3>Simulation</h3>
+        <div id="admin-sim-body"></div>
+      </section>
+
+      <section id="admin-danger">
+        <h3>Start of event</h3>
+        <div id="admin-danger-body"></div>
+      </section>
+    </div>
+  </div>
+
+  <script src="config.js"></script>
+  <script src="engine.js"></script>
+  <script src="ui.js"></script>
+</body>
+</html>

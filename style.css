@@ -1,0 +1,107 @@
+/* =========================================================================
+   HARVEST SPIN - STYLE (deliberately plain; a designer will restyle this)
+   -------------------------------------------------------------------------
+   Designer notes:
+   - ui.js never sets inline colours/sizes. It only toggles these state
+     classes and one CSS variable, so everything visual lives in this file:
+       #meter.is-ramping      Harvest Meter is full and the grand odds are rising
+       #meter.is-claimed      grand prize already won
+       #meter-fill            width comes from the CSS variable --fill (set on #meter)
+       .reel.is-spinning      a reel is spinning
+       .reel.is-stopped       a reel has just landed
+       #result.is-win / .is-none   result panel for a prize / no prize
+       #spin-btn:disabled     while spinning or no spins left
+   - IDs and class names in index.html are stable hooks - keep them if you
+     restructure, or tell the developer.
+   ========================================================================= */
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  background: #f4f1e8;
+  color: #222;
+}
+
+button { font: inherit; cursor: pointer; padding: .5rem 1rem; }
+button:disabled { cursor: not-allowed; opacity: .5; }
+
+#app { max-width: 40rem; margin: 0 auto; padding: 1rem; text-align: center; }
+#title { margin: .5rem 0 0; }
+#tagline { margin: .25rem 0 1rem; color: #555; }
+
+/* --- banners --- */
+.banner { background: #fff3b0; border: 2px solid #e0b800; padding: .5rem; margin-bottom: 1rem; font-weight: bold; }
+.error-banner { background: #b00020; color: #fff; padding: .75rem 1rem; }
+.error-banner ul { margin: .25rem 0 0; }
+.warn-banner { background: #ffd9a8; padding: .5rem 1rem; }
+
+/* --- Harvest Meter --- */
+#meter { --fill: 0%; border: 2px solid #999; background: #fff; padding: .75rem; margin-bottom: 1rem; }
+.meter-head { display: flex; justify-content: space-between; font-weight: bold; }
+.meter-track { height: 1.25rem; background: #ddd; border: 1px solid #999; margin: .4rem 0; overflow: hidden; }
+#meter-fill { height: 100%; width: var(--fill); background: #5aa02c; transition: width .4s; }
+#meter-rule { margin: .25rem 0 0; font-size: .95rem; }
+#meter.is-ramping { border-color: #e0a000; animation: glow 1.2s ease-in-out infinite alternate; }
+#meter.is-ramping #meter-fill { background: #f0a800; }
+#meter.is-claimed { opacity: .7; }
+@keyframes glow {
+  from { box-shadow: 0 0 4px #ffd54a; }
+  to   { box-shadow: 0 0 18px 4px #ffb300; }
+}
+
+/* --- player panel --- */
+#player-panel { display: flex; gap: 1rem; align-items: center; justify-content: center; flex-wrap: wrap; margin-bottom: 1rem; }
+.player-stat strong { font-size: 1.5rem; margin-left: .25rem; }
+
+/* --- reels --- */
+#reels { display: flex; gap: .75rem; justify-content: center; margin: 1rem 0; }
+.reel { width: 7rem; height: 7rem; background: #fff; border: 3px solid #444; border-radius: 8px; display: flex; align-items: center; justify-content: center; }
+.reel .symbol { font-size: 4rem; line-height: 1; }
+.reel.is-spinning { background: #eee; }
+.reel.is-spinning .symbol { filter: blur(1.5px); }
+.reel.is-stopped { animation: land .25s ease-out; }
+@keyframes land { from { transform: translateY(-8px); } to { transform: translateY(0); } }
+
+/* --- spin button --- */
+#spin-btn { font-size: 2rem; font-weight: bold; padding: 1rem 3rem; background: #2e7d32; color: #fff; border: 0; border-radius: 10px; }
+#spin-hint { min-height: 1.5em; color: #555; }
+
+/* --- result --- */
+#result { border: 2px solid #999; background: #fff; padding: .75rem 1rem; margin-top: 1rem; }
+#result.is-win { border-color: #2e7d32; background: #e7f6e7; }
+#result h2 { margin: 0 0 .25rem; }
+#result p { margin: 0; font-size: 1.1rem; }
+
+/* --- operator bar --- */
+#operator-bar { text-align: center; padding: 1rem; }
+#operator-bar button { font-size: .8rem; padding: .25rem .6rem; opacity: .6; }
+
+/* --- admin panel (functional styling only) --- */
+.admin-overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, .6); overflow-y: auto; z-index: 10; padding: 1rem; }
+.admin-overlay[hidden] { display: none; }
+.admin-panel { background: #fff; max-width: 60rem; margin: 0 auto; padding: 1rem 1.25rem; border-radius: 6px; text-align: left; }
+.admin-head { display: flex; justify-content: space-between; align-items: center; }
+.admin-panel section { border-top: 1px solid #ccc; margin-top: 1rem; padding-top: .5rem; }
+.admin-panel table { border-collapse: collapse; width: 100%; margin: .5rem 0; font-size: .9rem; }
+.admin-panel th, .admin-panel td { border: 1px solid #ddd; padding: .25rem .4rem; text-align: left; }
+.admin-panel th { background: #f0f0f0; }
+.admin-panel input[type="number"] { width: 6rem; }
+.admin-panel input[type="text"] { width: 12rem; }
+.admin-panel fieldset { margin: .5rem 0; }
+.admin-panel label { display: inline-block; margin: .15rem 1rem .15rem 0; }
+.admin-panel dl { display: grid; grid-template-columns: max-content 1fr; gap: .15rem 1rem; margin: .5rem 0; }
+.admin-panel dt { font-weight: bold; }
+.admin-panel dd { margin: 0; }
+.admin-note { color: #555; font-size: .9rem; }
+.overridden, .overridden-sample { background: #fff3b0; }
+.field-error { color: #b00020; }
+#admin-settings-msg { min-height: 1.4em; font-weight: bold; }
+.danger { background: #b00020; color: #fff; border: 0; border-radius: 4px; }
+.danger-box { border: 2px solid #b00020; padding: .5rem .75rem; margin-top: .5rem; }
+.sim-progress { font-style: italic; }
+
+@media (prefers-reduced-motion: reduce) {
+  #meter.is-ramping, .reel.is-stopped { animation: none; }
+}
