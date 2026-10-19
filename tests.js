@@ -608,7 +608,10 @@
     state.overrides = { "tiers.tier5.prizeName": 'Rice, "premium" pack' };
     E.startNewPlayer(state, settingsFor(state.overrides));
     const rng = E.mulberry32(SEED);
-    for (let i = 0; i < 3; i++) E.commitSpin(state, E.resolveSpin(state, Config, rng));
+    for (let i = 0; i < 3; i++) {
+      if (!E.canSpin(state)) E.startNewPlayer(state, settingsFor(state.overrides));   // works for any spinsPerPlayer
+      E.commitSpin(state, E.resolveSpin(state, Config, rng));
+    }
     state.log.push(Object.assign({}, state.log[0], { tier: "tier5", prize: 'Rice, "premium" pack' }));
     const lines = E.logToCsv(state.log).trim().split("\r\n");
     eq(lines.length, 5, "header + 4 rows");
@@ -632,7 +635,10 @@
     const state = E.createInitialState();
     E.startNewPlayer(state, settingsFor());
     const rng = E.mulberry32(SEED);
-    for (let i = 0; i < 3; i++) E.commitSpin(state, E.resolveSpin(state, Config, rng));
+    for (let i = 0; i < 3; i++) {
+      if (!E.canSpin(state)) E.startNewPlayer(state, settingsFor());   // works for any spinsPerPlayer
+      E.commitSpin(state, E.resolveSpin(state, Config, rng));
+    }
     state.log.forEach((e) => eq(E.logRow(e).length, E.LOG_COLUMNS.length));
     eq(E.logRow(state.log[0])[1], 1, "spin number"); eq(E.logRow(state.log[0])[9], "yes", "bonus flag");
     const csv = E.logToCsv(state.log).trim().split("\r\n");
