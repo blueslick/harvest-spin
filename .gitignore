@@ -13,3 +13,7 @@ Thumbs.db
 # Node (only used for `node tests.js`; nothing to install)
 node_modules/
 npm-debug.log*
+
+# Backups contain the live spin log - never commit
+harvest-spin-backup*.json
+*.backup.json
