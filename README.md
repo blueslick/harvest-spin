@@ -6,6 +6,8 @@ Plain HTML + CSS + vanilla JavaScript. No frameworks, no build step, no server, 
 
 > Status: working mechanics with a deliberately plain UI. A designer will restyle it later (see [For the designer](#for-the-designer)).
 
+> **Picking this up with Claude Code?** Open Claude Code on this repo and say *"Read `CONTEXT-BRIEF.md` and follow it."* That file has the backstory, current state, to-do list and working rules.
+
 ---
 
 ## Contents
@@ -45,6 +47,7 @@ Optional extras:
 | `ui.js` | DOM, reel animation, buttons, admin panel, saving to the browser | Developer |
 | `index.html`, `style.css` | Page structure and look | Designer |
 | `tests.js`, `test.html` | Automated checks (same tests, two ways to run them) | Developer |
+| `CONTEXT-BRIEF.md` | Handover brief for Claude Code: history, current state, to-dos, working rules | Anyone (keep it current) |
 | `apps-script/` | The Google Sheets receiver (`Code.gs`) and its test (`node apps-script/test.js`) | Developer |
 
 The logic/presentation split is strict: `engine.js` knows nothing about the page, and `ui.js` never makes a game decision. It asks the engine and draws the answer.
