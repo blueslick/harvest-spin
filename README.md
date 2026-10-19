@@ -54,10 +54,10 @@ The logic/presentation split is strict: `engine.js` knows nothing about the page
 
 ## Running the booth
 
-1. Open `index.html`. Press **New Player** (gives the player their spins, 3 by default).
+1. Open `index.html`. Press **New Player** (gives the player their spins: 1 for this event, set by `spinsPerPlayer`).
 2. Press **Harvest!**. The three reels spin and stop one by one, left to right.
 3. The result appears: the tier and prize name. **Everyone wins something**: spins that win nothing else get the Tier 6 Thank-You Gift. Hand over the prize.
-4. When the player has no spins left, press **New Player** for the next one.
+4. When the player has no spins left (after their one spin, this event), press **New Player** for the next one.
 
 The **Harvest Meter** fills as the machine's total spin count approaches the "ramp start" spin, then glows once the grand prize odds are rising. The **Launch Bonus** banner shows while boosted spins remain.
 
@@ -121,7 +121,7 @@ Things worth knowing about these rules:
 - 🍚🍚🍽️ counts as a **pair** (tier 4), not a single plate: tier 5 requires "no pair".
 - 🍽️🍽️ + any other symbol matches none of tiers 1–5, so it lands in the Thank-You Gift pool. Because that pool is uniform over its 69 combos, 15 of them (about 22% of thank-you spins) show two plates. This is not deliberate near-miss logic. To change it, change the tier rules in `config.js`.
 - A sold-out tier's combinations are never shown, not even as a Thank-You Gift, so a winning-looking combo never appears without its prize.
-- **Nobody leaves empty-handed, as long as Thank-You Gifts are in stock.** If they run out, the spin shows "out of gifts" and the game warns the operator (bottom of the screen) when stock is low. With the default odds, about 46% of spins are Thank-You Gifts (about 64 in a 150-spin event), so stock roughly **half as many gifts as the total spins you expect**.
+- **Nobody leaves empty-handed, as long as Thank-You Gifts are in stock.** If they run out, the spin shows "out of gifts" and the game warns the operator (bottom of the screen) when stock is low. With the standard tier chances, about 46% of ordinary spins are Thank-You Gifts. In the 70-spin event this config is set up for, the launch bonus (first 10 spins) and the grand prize's late climb (spins 64+) squeeze them out, so the average is about 27 gifts, and the default stock of 33 covers about 19 events in 20. See `EVENT-SIZING.md`.
 
 ### Rising odds for the grand prize
 
@@ -131,17 +131,19 @@ from rampStartSpin on:  baseChance + rampStep × (spinNumber − rampStartSpin +
 from guaranteedBySpin:  100%
 ```
 
-`spinNumber` counts **every spin on this machine since the event started**, across all players. With the defaults (0.1% base, ramp at 90, +2% per spin, guaranteed at 130):
+`spinNumber` counts **every spin on this machine since the event started**, across all players. With the defaults (0.1% base, ramp at 60, +9% per spin, guaranteed at 70, sized for about 70 players with 1 spin each):
 
-| Spin | 1–89 | 90 | 95 | 100 | 110 | 120 | 129 | 130+ |
+| Spin | 1–59 | 60 | 62 | 64 | 66 | 68 | 69 | 70+ |
 |---|---|---|---|---|---|---|---|---|
-| Grand chance | 0.1% | 2.1% | 12.1% | 22.1% | 42.1% | 62.1% | 80.1% | 100% |
+| Grand chance | 0.1% | 9.1% | 27.1% | 45.1% | 63.1% | 81.1% | 90.1% | 100% |
+
+With about 70 players that means the grand prize is won between spin 60 and 70 about 94% of the time, and before spin 60 (a lucky early win) about 6%. If fewer than 60 players turn up it is not guaranteed: see "If turnout is low" in `EVENT-SIZING.md`. Late in the ramp the other tiers shrink to make room (tiers 2–5 are scaled down proportionally and the Thank-You Gift chance is 0% from about spin 64), so the last players in a busy event all win a real prize or the grand.
 
 Once the grand prize is won (stock 0) it is switched off for the rest of the event.
 
 ### Launch bonus
 
-For the first `spins` spins of the event (default 10), the odds of tiers 2–5 are multiplied by `multiplier` (default 2×). It never touches the grand prize.
+For the first `spins` spins of the event (default 10), the odds of tiers 2–5 are multiplied by `multiplier` (default 2×). It never touches the grand prize. This event keeps it on deliberately, so the first 10 players are guaranteed a real prize.
 
 The total probability can never exceed 100%. If the boosted tiers would exceed the room left after the grand prize's share, they are **scaled down proportionally** (their relative odds stay the same). With the default numbers, tiers 2–5 add up to 54%, so 2× would be 108%: the cap kicks in, the effective boost is about 1.85×, and the Thank-You Gift chance drops to 0% for those spins, so all 10 boosted spins win a real prize from tiers 1–5. Use a multiplier of 1.5 or lower if you want boosted spins to still sometimes give just a Thank-You Gift.
 
@@ -171,7 +173,7 @@ Open with **Ctrl+Shift+A**, then enter the PIN (set as `adminPin` in `config.js`
 - **Live stats:** total spins, players, current grand chance, prizes given, stock, cost given, and each outcome's chance on the next spin.
 - **Odds, stock and prizes:** edit chances, prize names and costs, stock remaining, the grand prize schedule, the launch bonus (on/off, spins, multiplier), spins per player, and the out-of-stock rule. Changes save instantly and invalid values are rejected with a message (for example, tier chances totalling more than 100%). **Reset odds & settings to config.js defaults** clears all admin edits (it keeps the log and prizes already given).
 - **Budget calculator:** expected cost of the next spin (Σ chance × prize cost), projected total for any number of spins, and the cost of prizes given so far. The projection includes the launch bonus and grand ramp but ignores tier 2–5 stock limits.
-- **Simulation:** runs 10,000 pretend events of 150 spins with the current settings and starting stock, and shows when the grand prize is typically won (median, 10th and 90th percentile) and the average cost per event. It uses a private copy of everything and **never touches the real log or state**. With the default config, the grand prize is typically won around spin 97 (10th–90th percentile: spins 90–103) at an average prize cost of roughly RM 288 per event (placeholder costs).
+- **Simulation:** runs 10,000 pretend events of 70 spins (the `simulation.spinsPerEvent` default) with the current settings and starting stock, and shows when the grand prize is typically won (median, 10th and 90th percentile) and the average cost per event. It uses a private copy of everything and **never touches the real log or state**. With the default config, the grand prize is typically won around spin 63 (10th–90th percentile: spins 60–65) at an average prize cost of roughly RM 165 per event (placeholder costs).
 - **Full reset:** erases spins, players, the log and prizes given, for the start of the event. It needs you to type `RESET`, and it keeps your odds and settings.
 
 ## Saved data and CSV export

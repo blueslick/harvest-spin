@@ -26,7 +26,7 @@ You're picking up **Harvest Spin**, a food-themed, slot-style prize game for a s
 It runs in a browser on one laptop at the booth. An operator (the owner or the friend) drives it:
 
 1. A player answers a quiz on paper.
-2. The operator presses **New Player** (3 spins by default).
+2. The operator presses **New Player** (1 spin per player for this event; `spinsPerPlayer` in `config.js`).
 3. The player presses **Harvest!**. Three reels spin and stop left to right.
 4. The screen shows the prize to hand over.
 
@@ -98,15 +98,15 @@ Default tiers:
 
 ### Grand prize rising odds
 
-- **Schedule:** 0.1% per spin until machine spin 90, then +2% per spin, reaching 100% at spin 130.
+- **Schedule:** 0.1% per spin until machine spin 60, then +9% per spin, reaching 100% at spin 70 (sized for about 70 players).
 - **Spin number** counts every spin on the machine since the event started.
 - The grand prize is disabled once it's won.
-- **Simulation:** it's usually won around spin 97 (10th–90th percentile: spins 90–103).
-- **Harvest Meter:** the on-screen meter fills toward spin 90 and glows once the ramp is active.
+- **Simulation:** it's won between spin 60 and 70 about 94% of the time (median spin 63) and earlier about 6% of the time. With under 60 players it is not guaranteed (about 5% at 55): `EVENT-SIZING.md` has the operator's low-turnout steps.
+- **Harvest Meter:** the on-screen meter fills toward spin 60 and glows once the ramp is active. Kept visible on purpose (crowd-puller).
 
 ### Launch bonus
 
-- For the first 10 spins, tiers 2–5 are multiplied by 2.
+- For the first 10 spins, tiers 2–5 are multiplied by 2. Kept on deliberately for this event (early buzz): the first 10 players are guaranteed a real prize.
 - They're capped so the total stays at or under 100% (scaled down proportionally).
 - It never touches the grand prize.
 - **Known side effect, kept so far:** with the default odds the cap kicks in, so the Thank-You Gift is 0% during boosted spins.
@@ -149,7 +149,7 @@ Default tiers:
   - Live stats.
   - Editing of odds, prize names, costs, stock, the grand schedule, the launch bonus, spins per player and the out-of-stock rule. Edits are saved as overrides on top of `config.js` and highlighted, with a button to reset to the `config.js` defaults.
   - A budget calculator.
-  - A simulation: 10,000 events × 150 spins, run on a private copy.
+  - A simulation: 10,000 events × 70 spins (`simulation.spinsPerEvent`), run on a private copy.
   - Sheets sync settings and backup/restore.
   - A Full reset that needs you to type RESET.
 
@@ -172,12 +172,13 @@ Default tiers:
 
 ## Current state (2026-10-19)
 
+- **Event plan (decided):** about 70 players, **1 spin each**, so about 70 spins. Launch bonus stays on (10 spins x2) and the Harvest Meter stays visible. `config.js` is sized for this; the reasoning and numbers are in `EVENT-SIZING.md` (read its "If turnout is low" section too).
 - **Tests:** all 55 unit tests and the Apps Script tests pass.
 - **Branch:** everything is merged into `main`. The working branch `claude/practical-bohr-1bcvkm` is the same as `main` and can be ignored.
 - **Placeholders still to replace:**
   - **Prize costs:** Grand RM 50, T2 RM 10, T3 RM 5, T4 RM 2, T5 RM 1, Thank-You RM 0.50. Prize names are placeholders too.
-  - **Stock:** 1 / 8 / 18 / 40 / 60 / 100.
-  - **Thank-You Gift stock:** it's the most-used prize (about 46% of spins, about 64 per 150-spin event), so it needs roughly half as many gifts as the spins you expect.
+  - **Stock (sized for 70 spins, launch bonus on, 95th percentile):** Grand 1, T2 5, T3 10, T4 20, T5 26, Thank-You 33. Re-size it if the real prizes or the turnout estimate change; re-run the simulation described in `EVENT-SIZING.md`.
+  - **Thank-You Gift stock:** about 27 are handed out on average in a 70-spin event (fewer than the 46% rule of thumb, because the launch bonus and the grand's late climb squeeze it out).
 
 ## Open to-do list (none of this has been started)
 
