@@ -4,6 +4,75 @@
 
 **Setup:** every number below comes from the engine's own probability code (`computeProbabilities` and `rollTier`), run headless in Node, 20,000 pretend events per cell. Nothing touched real state. With 1 spin per player, **spin number = player number**, so "turnout" below means players = spins. Prize costs are still the placeholders (Grand RM 50, T2 10, T3 5, T4 2, T5 1, Thank-You 0.50), so treat the RM figures as relative, not real.
 
+## Update 2026-10-19: decisions made and applied to `config.js`
+
+Everything below this box is the original analysis (it compared options with the launch bonus off). The decisions that were then made differ from the recommendation, so **this box is the current truth** and the stock table here replaces the one in section 3.
+
+**Decided:** 70 players, 1 spin each; grand `baseChance 0.001`, `rampStartSpin 60`, `rampStep 0.09`, `guaranteedBySpin 70`; launch bonus **on** (10 spins x2, deliberately); Harvest Meter stays visible; `simulation.spinsPerEvent` 70.
+
+### Does the grand schedule do what was asked?
+
+Yes. Exact calculation, cross-checked by simulation:
+
+| Result at 70 players | Value |
+|---|---|
+| Won before spin 60 (a lucky early win, from the 0.1% base chance) | 5.7% |
+| Won in the 60-70 window | **94.3%** |
+| Median spin it is won | 63 |
+| Not won at all by spin 70 | 0% (spin 70 is a certainty) |
+
+Cumulative chance it has been won by spin: 59: 5.7%, 60: 14.3%, 61: 29.8%, 62: 48.8%, 63: 67.3%, 64: 82.1%, 65: 91.8%, 66: 97.0%, 67: 99.2%, 68: 99.8%, 69: 100.0%.
+
+### Does the grand's rising chance interact badly with the launch bonus cap?
+
+No. The bonus is over after spin 10, so it never overlaps the ramp. In every spin I checked (1, 6, 10, 11 and 59-70) the probabilities add up to exactly 100%. What does happen from spin 60 is that the normal 100% cap makes tiers 2-5 shrink **proportionally** (they keep their relative odds) to make room for the grand's share:
+
+| Next spin | 59 | 60 | 62 | 64 | 65 | 66 | 68 | 69 | 70 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| Grand | 0.1% | 9.1% | 27.1% | 45.1% | 54.1% | 63.1% | 81.1% | 90.1% | 100% |
+| Tier 2 | 3.0% | 3.0% | 3.0% | 3.0% | 2.5% | 2.0% | 1.1% | 0.6% | 0% |
+| Tier 3 | 8.0% | 8.0% | 8.0% | 8.0% | 6.8% | 5.5% | 2.8% | 1.5% | 0% |
+| Tier 4 | 18.0% | 18.0% | 18.0% | 18.0% | 15.3% | 12.3% | 6.3% | 3.3% | 0% |
+| Tier 5 | 25.0% | 25.0% | 25.0% | 25.0% | 21.2% | 17.1% | 8.8% | 4.6% | 0% |
+| Thank-You | 45.9% | 36.9% | 27.9% | 0.9% | 0% | 0% | 0% | 0% | 0% |
+
+Tiers 2-5 add up to 54%, so they only start shrinking once the grand takes more than 46%, which happens from spin 65.
+
+Things to know (none of them is a bug):
+- From spin 65 until the grand is won there is **no Thank-You chance**: each of those players gets the grand or a real prize from tiers 2-5. It is the same effect the launch bonus has, at the other end of the event.
+- Once the grand is won, everything snaps back to the normal 3 / 8 / 18 / 25 / 46% split (checked at spin 65 with the grand already gone).
+- The last players of a busy event therefore draw tiers 2-5 slightly harder than usual. That is already included in the stock numbers below.
+
+### Revised stock (95th percentile; 70 spins; launch bonus on; this grand schedule)
+
+Units the game hands out per 70-spin event, from 40,000 simulated events with unlimited stock:
+
+| Tier | Average used | 90th percentile | **95th percentile (new `startingStock`)** | 99th percentile | Old stock |
+|---|---:|---:|---:|---:|---:|
+| Grand | 1.0 | 1 | **1** | 1 | 1 |
+| T2 Triple Harvest | 2.4 | 4 | **5** | 6 | 8 |
+| T3 Balanced Plate | 6.3 | 9 | **10** | 12 | 18 |
+| T4 Lucky Pair | 14.1 | 18 | **20** | 22 | 40 |
+| T5 Single Plate | 19.6 | 24 | **26** | 28 | 60 |
+| T6 Thank-You | 26.7 | 32 | **33** | 36 | 100 |
+
+Compared with the launch-bonus-off numbers: tiers 4 and 5 need about 2 more units each, T2 and T3 are about the same, and Thank-You needs about 5 fewer (33 instead of 38), because the bonus takes 10 players out of the Thank-You pool.
+
+How these stock levels hold up (share of events in which a tier's stock hits zero before the event ends; this counts giving out the very last unit). Average cost per event is at the placeholder prize costs:
+
+| Turnout | T2 | T3 | T4 | T5 | Thank-You | Avg spins with "out of gifts" | Avg cost |
+|---:|---:|---:|---:|---:|---:|---:|---:|
+| 55 | 3.8% | 2.8% | 0.5% | 0.3% | 0.0% | 0 | RM 96 |
+| 60 | 5.4% | 4.2% | 1.4% | 0.8% | 0.3% | 0 | RM 108 |
+| 65 | 7.0% | 6.5% | 3.1% | 2.7% | 1.5% | 0.01 | RM 154 |
+| **70** | **8.5%** | **9.2%** | **5.7%** | **5.8%** | **7.2%** | **0.09** | **RM 165** |
+| 75 | 10.4% | 12.7% | 10.1% | 10.8% | 20.1% | 0.35 | RM 172 |
+| 80 | 12.4% | 16.6% | 15.3% | 18.9% | 44.3% | 1.07 | RM 179 |
+
+So at 70 players each tier hits zero in roughly 1 event in 12 to 1 in 20. A tier running out only means that player gets the next outcome down, not a crash. **The Thank-You Gift is the one to watch above 70 players:** at 80 players it runs out in 44% of events. It is the cheapest tier, so if you want more safety, 36 (the 99th percentile) costs little. The warning at `lowStockWarning: 10` shows on the operator screen.
+
+---
+
 ## 1. Checking the reading of the current config
 
 | Claim | Verdict |
@@ -116,7 +185,7 @@ Average total prize cost is almost identical for B-E (about RM 126 / 142 / 157 a
 - Smaller versions are possible but gain little: **5 spins x 1.5** raises the average cost from RM 141.8 to RM 144.4 at 60 spins and still favours the first 5 players.
 - Set `launchBonus.enabled: false` and leave `spins` and `multiplier` as they are, so it can be turned back on.
 
-### Prize stock
+### Prize stock (SUPERSEDED: this assumed the launch bonus was off; use the table in the update box at the top)
 Units the game *hands out* per event (average / 95th percentile), bonus off. The 95th percentile is the level that would have been enough in 19 events out of 20.
 
 | Tier | Current stock | 50 spins | 60 spins | 70 spins | 85 spins |
@@ -167,7 +236,7 @@ When a tier runs out its chance falls to the Thank-You Gift (`outOfStock: "noPri
 
 The grand is won in 100% of 50-70-player events and never in the first third up to 70 players. It still works at 35 (98% won) and is sensible at 85. B and D are equally good in the 50-70 range but less forgiving at the edges (B misses the quiet day, D is slightly worse at 35 and better at 85). Choose D if you would rather keep the winner less predictable (spread over spins 26-34) and accept 96% instead of 98% at 35.
 
-Exact `config.js` values:
+Exact `config.js` values for Option E as originally recommended (**not** what was applied; see the update box at the top for what is in `config.js` now):
 
 ```js
 spinsPerPlayer: 1,
@@ -199,3 +268,42 @@ Leave `lowStockWarning: 10` as it is. The decisions that are yours: the schedule
 ## How this was produced
 
 Scratch scripts outside the repo called `HarvestEngine.computeProbabilities` and `rollTier` in a loop (the same path as `simulateEvent`, with extra counters for stock run-out and units used per tier), seeded with `mulberry32`, 20,000 events per cell. Demand figures use unlimited stock on tiers 2-6, so they show what the game wants to give out; run-out figures use the real stock levels. The grand-prize timing figures were cross-checked against the exact closed-form probability.
+
+## If turnout is low (operator instructions)
+
+**The problem.** The grand prize only starts climbing at spin 60 and is only *certain* at spin 70. If fewer than 60 players come it is mostly never won: at 55 players it is won only 5.4% of the time (4.9% at 50). The fix is a two-box edit in the Admin panel, done before the event ends.
+
+**The rule.**
+
+1. Work out **L**, the spin number of the last player you are confident will play. (Example: you are on spin 38 and 12 more people are queued or committed, so L = 50.) Spin number = player number, because each player has one spin.
+2. Set **Ramp starts at spin** to **L - 10**. If that is already behind you, use the next spin number instead (the live stats show it as "(spin N)").
+3. Set **Guaranteed by spin** to **L**.
+4. Do it **when about 10 players are still to come, or sooner**. The earlier the better: a late edit still guarantees the grand by spin L, but with less build-up.
+
+This is the same shape as the planned 60/70 schedule, moved earlier: the grand is certain by spin L, and it falls in the final 11 spins about 94% of the time when done early enough.
+
+| If the last player will be (L) | Ramp starts at | Guaranteed by |
+|---:|---:|---:|
+| 65 | 55 | 65 |
+| 60 | 50 | 60 |
+| 55 | 45 | 55 |
+| 50 | 40 | 50 |
+| 45 | 35 | 45 |
+| 40 | 30 | 40 |
+
+**The exact clicks.**
+
+1. Press **Ctrl+Shift+A** (or add `#admin` to the page address) and enter the PIN.
+2. In the **Odds, stock and prizes** part, find the box titled **Grand prize rising odds**. The **Live stats** at the top show *Total spins* and *Grand prize chance (next spin) ... (spin N)*, where N is the number of the next spin.
+3. Click in **Ramp starts at spin**, type the new number, then press **Enter** (or **Tab**). The message *Saved.* should appear and the box is highlighted as changed.
+4. Click in **Guaranteed by spin**, type L, press **Enter**. Look for *Saved.* again.
+5. Check *Grand prize chance (next spin)* in the live stats. Press **Esc** to close the panel.
+
+**Do them in that order** (ramp start first, then guaranteed). The game refuses a guaranteed-by spin that is earlier than the ramp start and shows a red *Not saved* message instead. If you see that, do the ramp-start box first.
+
+**Notes.**
+- The Harvest Meter will jump when you change the ramp start, because it fills toward that number. That is expected.
+- If the grand has already been won, none of this matters.
+- If far more people turn up than planned, do the opposite: raise the two numbers, keeping the ramp start 10 below the guarantee.
+- To undo, put the boxes back to 60 and 70, or press **Reset odds & settings to config.js defaults**. That also undoes every other admin edit (stock, costs), though it keeps the spin log and the prizes already given.
+- I checked these rules against the game's own validation code and probabilities, but I have **not** driven the real Admin panel in a browser. Try it once at the rehearsal, then do a **Full reset**.
