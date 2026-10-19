@@ -27,7 +27,9 @@ const HARVEST_CONFIG = {
   currency: "RM",
 
   // How many spins one player gets when you press "New Player".
-  spinsPerPlayer: 3,
+  // This event: ONE spin each (about 70 players expected = about 70 spins).
+  // The grand prize schedule and the prize stock below are sized for that.
+  spinsPerPlayer: 1,
 
   // PIN needed to open the hidden Admin panel (Ctrl+Shift+A). Keep the quotes.
   // Use "" for no PIN. NOTE: this file is visible to anyone who can see the
@@ -62,10 +64,14 @@ const HARVEST_CONFIG = {
   // Once the grand prize has been won (its stock reaches 0) it is switched off.
   // ---------------------------------------------------------------------
   grandPrize: {
-    baseChance: 0.001,       // 0.1% per spin at the start
-    rampStartSpin: 90,       // the Harvest Meter is full and odds start rising here
-    rampStep: 0.02,          // +2% for every spin after that
-    guaranteedBySpin: 130,   // by this spin the chance is 100%
+    baseChance: 0.001,       // 0.1% per spin at the start (a small chance of a lucky early win)
+    rampStartSpin: 60,       // the Harvest Meter is full and odds start rising here
+    rampStep: 0.09,          // +9% for every spin after that
+    guaranteedBySpin: 70,    // by this spin the chance is 100% (the 70th player at the latest)
+    // In plain English: with about 70 players, the grand prize is won between
+    // spin 60 and spin 70 about 94% of the time, and before spin 60 about 6%.
+    // If fewer than 60 players turn up it is NOT guaranteed - see
+    // EVENT-SIZING.md ("If turnout is low") for what the operator does.
   },
 
   // ---------------------------------------------------------------------
@@ -74,6 +80,8 @@ const HARVEST_CONFIG = {
   // multiplied by `multiplier`. It never affects the grand prize, and the
   // total chance is capped at 100% (see README: "How the odds work"). Because
   // the Thank-You Gift takes what's left, a big multiplier just shrinks it.
+  // This event: ON, on purpose. The first 10 players are guaranteed a real
+  // prize (Tier 2-5, never a Thank-You Gift) to build early buzz.
   // Set enabled to false to turn it off.
   // ---------------------------------------------------------------------
   launchBonus: {
@@ -103,6 +111,9 @@ const HARVEST_CONFIG = {
   //   prizeName     PLACEHOLDER - replace with the real prize
   //   prizeCostRM   PLACEHOLDER - what one prize costs you, in RM
   //   startingStock how many of this prize you have at the start
+  //                 (the numbers below are sized so that, with about 70 players
+  //                 and the launch bonus on, each prize runs out in only about
+  //                 1 event in 20 - see EVENT-SIZING.md)
   //
   // RULES (each combination of 3 symbols must match AT MOST ONE tier -
   // test.html checks this for you):
@@ -135,7 +146,7 @@ const HARVEST_CONFIG = {
       chance: 0.03,                     // 3%
       prizeName: "Prize B (placeholder)",
       prizeCostRM: 10,
-      startingStock: 8,
+      startingStock: 5,
     },
     {
       id: "tier3",
@@ -145,7 +156,7 @@ const HARVEST_CONFIG = {
       chance: 0.08,                     // 8%
       prizeName: "Prize C (placeholder)",
       prizeCostRM: 5,
-      startingStock: 18,
+      startingStock: 10,
     },
     {
       id: "tier4",
@@ -155,7 +166,7 @@ const HARVEST_CONFIG = {
       chance: 0.18,                     // 18%
       prizeName: "Prize D (placeholder)",
       prizeCostRM: 2,
-      startingStock: 40,
+      startingStock: 20,
     },
     {
       id: "tier5",
@@ -165,7 +176,7 @@ const HARVEST_CONFIG = {
       chance: 0.25,                     // 25%
       prizeName: "Prize E (placeholder)",
       prizeCostRM: 1,
-      startingStock: 60,
+      startingStock: 26,
     },
     {
       // Nobody leaves empty-handed: this tier catches every spin that wins nothing above.
@@ -179,7 +190,7 @@ const HARVEST_CONFIG = {
       remainder: true,                  // marks this as the catch-all tier
       prizeName: "Thank-you gift (placeholder)",
       prizeCostRM: 0.5,
-      startingStock: 100,
+      startingStock: 33,
     },
   ],
 
@@ -195,7 +206,7 @@ const HARVEST_CONFIG = {
   // ---------------------------------------------------------------------
   simulation: {
     events: 10000,        // how many pretend events to run
-    spinsPerEvent: 150,   // spins in each pretend event
+    spinsPerEvent: 70,    // spins in each pretend event (= players, at 1 spin each)
   },
 
   // ---------------------------------------------------------------------
